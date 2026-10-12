@@ -12,16 +12,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Configure
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+        shell: bash
+        run: |
+          set -o pipefail
+          cmake -B build -DCMAKE_BUILD_TYPE=Release 2>&1 | tee build.log
       - name: Build
-        run: cmake --build build --config Release --parallel
+        shell: bash
+        run: |
+          set -o pipefail
+          cmake --build build --config Release --parallel 2>&1 | tee -a build.log
+      - name: Errors (only if something failed)
+        if: failure()
+        shell: bash
+        run: grep -n -i -E "error|fatal|cannot find|not found" build.log | head -60 || true
       - name: Pack
         shell: bash
         run: |
           mkdir -p out
-          find build -name "*.vst3" -maxdepth 4 -exec cp -R {} out/ \;
-          ls -R out | head -30
+          find build -maxdepth 4 -name "*.vst3" -exec cp -R {} out/ \;
+          ls -R out || true
       - uses: actions/upload-artifact@v4
         with:
           name: DrummerViz-${{ matrix.os }}
           path: out
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: log-${{ matrix.os }}
+          path: build.log

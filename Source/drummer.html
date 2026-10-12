@@ -1,0 +1,1786 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Барабанщик · вид сверху</title>
+<style>
+:root{--bg:#0c0e14;--panel:#151926;--line:#262c40;--fg:#eceef6;--mut:#8b93ab;--acc:#ff4f79;--brass:#e7c35a}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.35 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+body{min-height:100vh;padding-bottom:40px}
+.bar{display:flex;flex-wrap:wrap;gap:8px;padding:10px 12px;align-items:center;background:var(--panel);border-bottom:1px solid var(--line)}
+.bar.sub{background:transparent;border-bottom:0;padding-top:8px;padding-bottom:0}
+button,select,.btn{background:#212741;color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:9px 12px;font:inherit;cursor:pointer;line-height:1}
+button:active,.btn:active{transform:translateY(1px)}
+.primary{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:650}
+button.on{border-color:var(--brass);color:var(--brass)}
+input[type=range]{flex:1;min-width:110px;accent-color:var(--acc)}
+#time{color:var(--mut);font-variant-numeric:tabular-nums;min-width:84px;text-align:right}
+#info{padding:8px 14px 0;color:var(--mut);font-size:12.5px;min-height:34px}
+#stage{width:100%;max-width:520px;margin:6px auto 0;padding:0 6px}
+canvas{display:block;width:100%;border-radius:18px;background:#0c0e14;border:1px solid var(--line)}
+details{max-width:520px;margin:14px auto 0;padding:0 12px}
+summary{cursor:pointer;color:var(--fg);padding:10px 0;font-weight:600}
+.mrow{display:grid;grid-template-columns:12px 92px 1fr 70px;gap:8px;align-items:center;padding:4px 0}
+.mrow .dot{width:10px;height:10px;border-radius:50%}
+.mrow input{background:#10131f;border:1px solid var(--line);color:var(--fg);border-radius:8px;padding:7px 9px;font:inherit;width:100%}
+.mrow .nm{color:var(--mut);font-size:12px}
+.urow{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:4px 0}.urow .un{font-weight:650}.urow small{color:var(--mut);font-weight:400}.urow select{flex:1;max-width:190px}
+.lrow{display:grid;grid-template-columns:90px repeat(3,1fr);gap:8px;align-items:center;padding:4px 0}.lrow input{background:#10131f;border:1px solid var(--line);color:var(--fg);border-radius:8px;padding:7px 9px;font:inherit;width:100%}.lh{color:var(--mut);font-size:12px}
+.rrow{display:grid;grid-template-columns:66px 1fr 54px 128px;gap:8px;align-items:center;padding:3px 0;border-bottom:1px solid #1b2030}.rrow .rn{color:var(--mut);font-size:12px}.rrow select{padding:6px 8px;border-radius:8px}.rrow small{color:var(--mut)}
+textarea{width:100%;background:#10131f;border:1px solid var(--line);color:var(--fg);border-radius:10px;padding:8px;font:inherit}
+.plug .bar:not(.sub){display:none}.plug #info{display:none}
+.hint{color:var(--mut);font-size:12.5px;margin:4px 0 10px}
+</style>
+</head>
+<body>
+
+<div class="bar">
+  <label class="btn primary" for="file">Загрузить MIDI</label>
+  <input id="file" type="file" accept=".mid,.midi,audio/midi,audio/x-midi" hidden>
+  <select id="demoSel" aria-label="Демо-грувы"><option value="">Демо-грувы ▾</option></select>
+  <button id="rnd">Случайная</button>
+  <button id="play" class="primary" style="min-width:48px">▶</button>
+  <button id="stop">■</button>
+  <input id="seek" type="range" min="0" max="1000" value="0" aria-label="Позиция">
+  <span id="time">0:00 / 0:00</span>
+</div>
+<div class="bar sub">
+  <select id="speed" aria-label="Скорость">
+    <option value="0.5">0.5×</option><option value="0.75">0.75×</option>
+    <option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option>
+  </select>
+  <select id="snareMode" aria-label="Рука на снейре"><option value="auto">Снейр: авто</option><option value="L">Снейр: левой</option><option value="R">Снейр: правой</option></select>
+  <button id="view">Вид: сверху</button>
+  <button id="snd" class="on">Звук</button>
+  <button id="loop" class="on">Повтор</button>
+  <button id="nn">Номера нот</button>
+  <button id="live">MIDI-вход</button>
+</div>
+<div id="info"></div>
+<div id="plugInfo" class="hint" hidden style="padding:0 14px"></div>
+<details id="unmWrap" open style="display:none">
+  <summary>Не распознано нот: <span id="unmCount">0</span> — назначь барабан</summary>
+  <div class="hint">Это ноты из твоего MIDI, которых нет в раскладке. Выбери, какой барабан или тарелка играет каждую, и настройка сразу запомнится.</div>
+  <div id="unm"></div>
+</details>
+
+<div id="stage"><canvas id="cv"></canvas></div>
+
+<details>
+  <summary>Слои по velocity</summary>
+  <div class="hint">Максимальная velocity для каждого слоя; всё выше последнего числа — HARD. Слои меняют звук, высоту замаха палочки, яркость подсветки и подпись удара.</div>
+  <div id="lay"></div>
+</details>
+<details>
+  <summary>Привязка нот MIDI к барабанам</summary>
+  <div class="hint">Раскладка по умолчанию — General MIDI, на ней строится библиотека EZX. Если в твоём MIDI ноты другие — впиши номера через запятую, всё применится сразу.</div>
+  <div id="map"></div>
+  <button id="resetMap" style="margin-top:8px">Сбросить привязку</button>
+</details>
+<details id="smpWrap">
+  <summary>Звук Modern Metal EZX — твои сэмплы</summary>
+  <div class="hint">Сэмплы Toontrack мне недоступны, поэтому звук EZX берётся из твоей библиотеки: 1) скачай тест-MIDI; 2) вставь его в Superior Drummer / EZdrummer с китом Modern Metal и сделай экспорт аудио (Bounce) от начала такта; 3) загрузи этот WAV — страница нарежет каждый удар по слоям (ghost → hard) и артикуляциям и будет играть ИМ. Либо загрузи отдельные WAV с названиями вроде «snare_hard.wav», «kick_soft_2.wav», «hat_open2_med.wav». Сэмплы живут до перезагрузки страницы.</div>
+  <div style="display:flex;flex-wrap:wrap;gap:8px;margin:6px 0">
+    <button id="smpMidi">1. Скачать тест-MIDI</button>
+    <label class="btn" for="smpBounce">2. Загрузить WAV-баунс</label><input id="smpBounce" type="file" accept="audio/*" hidden>
+    <label class="btn" for="smpFiles">Отдельные WAV</label><input id="smpFiles" type="file" accept="audio/*" multiple hidden>
+    <button id="smpToggle">Сэмплы: выкл</button>
+    <button id="smpClear">Сбросить</button>
+  </div>
+  <div id="smpInfo" class="hint">Сейчас играет синтез с «метал»-голосом.</div>
+</details>
+<details id="routeWrap">
+  <summary>Полный роутинг нот (все инструменты EZX)</summary>
+  <div class="hint">Toontrack MIDI — это GM Extended, а точную раскладку Modern Metal показывает окно в EZdrummer/Superior: «?» → «About Sound Libraries» → «MIDI Layout». Скопируй оттуда строки вида «36 Kick», «40 Snare Rimshot» и вставь сюда — ноты и названия артикуляций подхватятся сами. Или назначай вручную в таблице.</div>
+  <textarea id="impTxt" rows="5" placeholder="36 Kick&#10;38 Snare Center&#10;40 Snare Rimshot&#10;24 Hi-hat Open 1"></textarea>
+  <div style="display:flex;gap:8px;align-items:center;margin:6px 0"><button id="impBtn">Применить вставленное</button><span id="impRes" class="hint" style="margin:0"></span></div>
+  <div id="route"></div>
+  <button id="routeReset" style="margin-top:8px">Сбросить роутинг</button>
+</details>
+
+<script>
+(() => {
+'use strict';
+const $ = id => document.getElementById(id);
+const clamp = (v,a,b) => Math.max(a,Math.min(b,v));
+const lerp = (a,b,t) => a+(b-a)*t;
+const NN = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+const noteName = n => NN[n%12] + (Math.floor(n/12)-2);   // C1 = 36, как в Toontrack
+
+/* ---------- Ударная установка (вид сверху, барабанщик внизу) ---------- */
+const W = 420, H = 650;
+const DRUMS = [
+ {id:'crash1', label:'CRASH 1', type:'cymbal', x:80,  y:300, r:40, notes:[49,29,54],   c:'#f0c64e', hand:'R'},
+ {id:'splash', label:'SPLASH',  type:'cymbal', x:210, y:238, r:24, notes:[55],         c:'#7fe3d8', hand:'R'},
+ {id:'crash2', label:'CRASH 2', type:'cymbal', x:332, y:285, r:40, notes:[57,27,56],   c:'#f0c64e', hand:'R'},
+ {id:'crashride', label:'CRASH RIDE', type:'cymbal', x:385, y:228, r:30, notes:[30,58], c:'#d9c27a', hand:'R'},
+ {id:'ride',   label:'RIDE',    type:'cymbal', x:355, y:372, r:44, notes:[51,59,53],   c:'#cfd8ee', hand:'R'},
+ {id:'china2', label:'CHINA 2', type:'cymbal', x:392, y:462, r:28, notes:[28,52],      c:'#ff7a5c', hand:'R'},
+ {id:'hat',    label:'HI-HAT',  type:'cymbal', x:85,  y:450, r:40, notes:[42,46,24,25,26], c:'#ebd86e', hand:'R'},
+ {id:'tom1',   label:'TOM 1',   type:'drum',   x:160, y:290, r:32, notes:[50,48],      c:'#5aaaff', hand:'any'},
+ {id:'tom2',   label:'TOM 2',   type:'drum',   x:260, y:290, r:34, notes:[47,45],      c:'#6a8cff', hand:'any'},
+ {id:'floor1', label:'FLOOR 1', type:'drum',   x:315, y:452, r:38, notes:[43],         c:'#8a7cff', hand:'any'},
+ {id:'floor2', label:'FLOOR 2', type:'drum',   x:320, y:532, r:34, notes:[41],         c:'#a874ff', hand:'any'},
+ {id:'snare',  label:'SNARE',   type:'drum',   x:210, y:470, r:36, notes:[38,40,37,39], c:'#ff4f79', hand:'any'},
+ {id:'kick',   label:'KICK',    type:'kick',   x:210, y:380, w:92, h:120, notes:[36,35], c:'#ff3d6e'},
+ {id:'hatpedal',label:'HH PEDAL',type:'pedal', x:118, y:540, notes:[44],              c:'#ebd86e'}
+];
+const DEFAULT_NOTES = DRUMS.map(d => d.notes.slice());
+const BY = Object.fromEntries(DRUMS.map(d => [d.id,d]));
+let noteMap = {};
+// Названия артикуляций (GM Extended). Для нот, которых тут нет, имя берётся из твоего MIDI Layout при импорте.
+const ART_NAME = {35:'Kick alt',36:'Kick',37:'Side stick',38:'Snare center',39:'Snare alt',40:'Rimshot',
+  41:'Floor 2',42:'Hat closed',43:'Floor 1',44:'Hat pedal',45:'Rack 2 alt',46:'Hat open',47:'Rack 2',48:'Rack 1 alt',
+  49:'Crash 1',50:'Rack 1',51:'Ride',52:'China',53:'Ride bell',55:'Splash',57:'Crash 2',59:'Ride edge',
+  24:'Hat open 1',25:'Hat open 2',26:'Hat open 3',27:'Crash 2 alt',28:'China 2',29:'Crash 1 alt',30:'Crash ride',54:'Crash 1 muted',56:'Crash 2 muted',58:'Crash ride muted',60:'Hat extra',62:'Hat extra',63:'Hat extra'};
+const ART_KIND = {40:'rim',37:'side',53:'bell',54:'mute',56:'mute',58:'mute'};   // mute = заглушённый удар / глушение тарелки рукой      // особые удары: римшот, side stick, бэлл
+const HAT_OPEN = {46:1, 24:0.25, 25:0.5, 26:0.75};    // степень открытия хэта
+const DEF = {name:Object.assign({},ART_NAME), kind:Object.assign({},ART_KIND), open:Object.assign({},HAT_OPEN)};
+const isRim = n => ART_KIND[n] === 'rim', isSide = n => ART_KIND[n] === 'side', isBell = n => ART_KIND[n] === 'bell', isMute = n => ART_KIND[n] === 'mute';
+const cleared = new Set();
+const rebuildMap = () => {
+  noteMap = {}; DRUMS.forEach(d => d.notes.forEach(n => noteMap[n] = d.id));
+  // GM Extended у Toontrack: доп. удары хэта лежат в 11–26 и 60, 62, 63
+  for(let n=11;n<=26;n++) if(!noteMap[n] && !cleared.has(n)) noteMap[n] = 'hat';
+  [60,62,63].forEach(n => { if(!noteMap[n] && !cleared.has(n)) noteMap[n] = 'hat'; });
+};
+rebuildMap();
+
+/* ---------- MIDI-файл ---------- */
+function parseMIDI(buf){
+  const dv = new DataView(buf); let p = 0;
+  const str = n => { let s=''; for(let i=0;i<n;i++) s+=String.fromCharCode(dv.getUint8(p++)); return s; };
+  if(str(4) !== 'MThd') throw new Error('Это не MIDI-файл');
+  const hlen = dv.getUint32(p); p += 4;
+  const ntr = dv.getUint16(p+2), div = dv.getUint16(p+4); p += hlen;
+  const raw = [], tempos = [{tick:0, uspq:500000}];
+  for(let t=0; t<ntr && p<dv.byteLength; t++){
+    const id = str(4), len = dv.getUint32(p); p += 4;
+    const end = p+len;
+    if(id !== 'MTrk'){ p = end; continue; }
+    let tick = 0, run = 0, b;
+    const varlen = () => { let v=0; do{ b=dv.getUint8(p++); v=(v<<7)|(b&0x7f); }while(b&0x80); return v; };
+    while(p < end){
+      tick += varlen();
+      let st = dv.getUint8(p);
+      if(st & 0x80){ p++; if(st < 0xF0) run = st; } else st = run;
+      if(st === 0xFF){
+        const type = dv.getUint8(p++), l = varlen();
+        if(type === 0x51 && l === 3) tempos.push({tick, uspq:(dv.getUint8(p)<<16)|(dv.getUint8(p+1)<<8)|dv.getUint8(p+2)});
+        p += l;
+      } else if(st === 0xF0 || st === 0xF7){
+        p += varlen();
+      } else {
+        const type = st & 0xF0, ch = st & 0x0F;
+        if(type === 0xC0 || type === 0xD0){ p += 1; }
+        else {
+          const a = dv.getUint8(p++), c = dv.getUint8(p++);
+          if(type === 0x90 && c > 0) raw.push({tick, note:a, vel:c, ch});
+        }
+      }
+    }
+    p = end;
+  }
+  let toSec;
+  if(div & 0x8000){
+    const fps = 256-(div>>8), tpf = div & 0xff;
+    toSec = tick => tick/(fps*tpf);
+  } else {
+    tempos.sort((a,b) => a.tick-b.tick);
+    const segs = []; let acc = 0, prev = tempos[0];
+    segs.push({tick:prev.tick, sec:0, uspq:prev.uspq});
+    for(let i=1;i<tempos.length;i++){
+      const t = tempos[i];
+      acc += (t.tick-prev.tick)/div*prev.uspq/1e6;
+      segs.push({tick:t.tick, sec:acc, uspq:t.uspq}); prev = t;
+    }
+    toSec = tick => {
+      let s = segs[0];
+      for(let i=segs.length-1;i>=0;i--) if(segs[i].tick <= tick){ s = segs[i]; break; }
+      return s.sec + (tick-s.tick)/div*s.uspq/1e6;
+    };
+  }
+  const drumCh = raw.filter(n => n.ch === 9);
+  const use = drumCh.length ? drumCh : raw;
+  const ppq = (div & 0x8000) ? 0 : div;
+  const notes = use.map(n => ({t:toSec(n.tick), q:ppq ? n.tick/ppq : toSec(n.tick)*2, note:n.note, vel:n.vel}));
+  notes.sort((a,b) => a.t-b.t);
+  const tp = tempos.find(t => t.tick > 0 || t.uspq !== 500000) || tempos[0];
+  notes.bpm = 60e6/tp.uspq;
+  return notes;
+}
+
+/* ---------- Демо-грувы (velocity подобраны под слои библиотеки) ---------- */
+const VL = {k:{g:100,s:100,m:111,h:125}, s:{g:48,s:80,m:101,h:122}, c:{g:50,s:90,m:115,h:127}, t:{g:55,s:90,m:115,h:127}};
+let seed = 7;
+const rnd = () => { seed = (seed*16807) % 2147483647; return seed/2147483647; };
+function mkSeq(bpm,sd){
+  seed = sd || 7;
+  const st = 60/bpm/4, out = [];
+  const v = (g,l) => { const b = VL[g][l]; return l === 'h' ? b : Math.round(b + (rnd()-0.5)*5); };
+  const add = (step,note,g,l) => out.push({t:step*st, q:step/4, note, vel:v(g,l)});
+  return {out, bpm,
+    K:(s,l='m')=>add(s,36,'k',l), S:(s,l='h')=>add(s,l==='h' ? 40 : 38,'s',l), RS:(s,l='h')=>add(s,40,'s',l), SS:(s,l='m')=>add(s,37,'s',l),
+    H:(s,l='m')=>add(s,42,'c',l), O:(s,l='m')=>add(s,46,'c',l), P:(s,l='m')=>add(s,44,'c',l),
+    D:(s,l='m')=>add(s,51,'c',l), B:(s,l='h')=>add(s,53,'c',l),
+    C:(s,l='h')=>add(s,49,'c',l), C2:(s,l='h')=>add(s,57,'c',l), CH:(s,l='h')=>add(s,52,'c',l),
+    CR:(s,l='h')=>add(s,30,'c',l), CM:(s)=>add(s,54,'c','m'), C2M:(s)=>add(s,56,'c','m'), CRM:(s)=>add(s,58,'c','m'),
+    CH2:(s,l='h')=>add(s,28,'c',l), HN:(s,note,l='m')=>add(s,note,'c',l),
+    T:(s,n,l='m')=>add(s,n,'t',l)};
+}
+const fin = q => { const r = q.out.sort((a,b) => a.t-b.t); r.bpm = q.bpm; return r; };
+const T6 = [50,48,47,45,43,41];
+// ----- грувы: q — секвенсор, o — начало такта (в 16-х), c — сколько 16-х оставить под грув (остальное — сбивка)
+const GB = {
+  rock:(q,o,c,op={}) => { for(let i=0;i<16;i+=2) if(i<c) q.H(o+i, i%4===0 ? 'h' : 'm'); if(4<c) q.S(o+4); if(12<c) q.S(o+12);
+    (op.k||[0,8,10]).forEach(i => { if(i<c) q.K(o+i, i===0 ? 'h' : 'm'); }); },
+  ride:(q,o,c,op={}) => { for(let i=0;i<16;i+=2) if(i<c) q.D(o+i, i%4===0 ? 'h' : 'm'); if(4<c) q.S(o+4); if(12<c) q.S(o+12);
+    (op.k||[0,6,8,10]).forEach(i => { if(i<c) q.K(o+i, i===0 ? 'h' : 'm'); }); },
+  dbl:(q,o,c) => { for(let i=0;i<16;i+=2) if(i<c) q.D(o+i, i%4===0 ? 'h' : 'm'); if(4<c) q.S(o+4); if(12<c) q.S(o+12);
+    for(let i=0;i<16;i++) if(i<c) q.K(o+i, i%4===0 ? 'h' : 'm'); },
+  gallop:(q,o,c) => { for(let i=0;i<16;i+=2) if(i<c) q.D(o+i, i%4===0 ? 'h' : 'm'); if(4<c) q.S(o+4); if(12<c) q.S(o+12);
+    for(let b=0;b<4;b++) [0,2,3].forEach(j => { const i = b*4+j; if(i<c) q.K(o+i, j===0 ? 'h' : 'm'); }); },
+  skank:(q,o,c) => { [0,4,8,12].forEach(i => { if(i<c) q.K(o+i, i===0 ? 'h' : 'm'); });
+    for(let i=0;i<16;i+=2) if(i<c) q.H(o+i, i%4===0 ? 'h' : 'm'); [2,6,10,14].forEach(i => { if(i<c) q.S(o+i); }); },
+  blast:(q,o,c) => { for(let i=0;i<16;i++) if(i<c){ q.K(o+i, i%4===0 ? 'h' : 'm'); if(i%2===0) q.D(o+i, i%4===0 ? 'h' : 'm'); else q.S(o+i,'m'); } },
+  half:(q,o,c,op={}) => { [0,4,8,12].forEach(i => { if(i<c) q.H(o+i, i===0 ? 'h' : 'm'); }); if(8<c) q.RS(o+8);
+    [7,15].forEach(i => { if(i<c) q.S(o+i,'g'); }); (op.k||[0,3,6,10,11]).forEach(i => { if(i<c) q.K(o+i, i===0 ? 'h' : 'm'); }); },
+  china:(q,o,c,op={}) => { (op.pat||[[0,'h'],[6,'m'],[10,'m']]).forEach(([st,l]) => { if(st<c){ q.CH2(o+st,l); q.K(o+st, l==='h' ? 'h' : 'm'); } });
+    if(8<c) q.RS(o+8); (op.extraK||[]).forEach(i => { if(i<c) q.K(o+i,'m'); }); (op.ghost||[]).forEach(i => { if(i<c) q.S(o+i,'g'); }); },
+  hatopen:(q,o,c,op={}) => { const on = op.open || 46;
+    for(let i=0;i<16;i+=2) if(i<c){ if(i%4===0) q.H(o+i,'h'); else q.HN(o+i,on,i===14 ? 'h' : 'm'); }
+    [3,7,11,15].forEach(i => { if(i<c) q.P(o+i,'s'); }); if(4<c) q.S(o+4); if(12<c) q.S(o+12);
+    [0,8,10].forEach(i => { if(i<c) q.K(o+i, i===0 ? 'h' : 'm'); }); },
+  h16:(q,o,c) => { for(let i=0;i<16;i++) if(i<c){ if(i%2===0) q.H(o+i, i%4===0 ? 'h' : 'm'); else q.HN(o+i,24,'s'); }
+    if(4<c) q.S(o+4); if(12<c) q.S(o+12); [0,6,10].forEach(i => { if(i<c) q.K(o+i, i===0 ? 'h' : 'm'); }); },
+  tomgrv:(q,o,c) => { [[0,43,'h'],[2,47,'m'],[3,50,'m'],[4,43,'h'],[6,47,'m'],[7,50,'m'],[8,41,'h'],[10,43,'m'],[11,47,'m'],[12,43,'h'],[14,47,'m'],[15,50,'h']]
+      .forEach(([st,n,l]) => { if(st<c) q.T(o+st,n,l); });
+    [0,8,10].forEach(i => { if(i<c) q.K(o+i, i===0 ? 'h' : 'm'); }); [4,12].forEach(i => { if(i<c) q.RS(o+i); }); [4,12].forEach(i => { if(i<c) q.P(o+i,'m'); }); },
+  tomdbl:(q,o,c) => { for(let i=0;i<16;i+=2) if(i<c) q.T(o+i,[43,47,50,47][(i>>1)%4], i%4===0 ? 'h' : 'm');
+    for(let i=0;i<16;i++) if(i<c) q.K(o+i, i%4===0 ? 'h' : 'm'); [4,12].forEach(i => { if(i<c) q.RS(o+i); }); },
+  tomrr:(q,o,c) => { const sq = [50,48,47,45,43,41,43,45,47,48,50,48,47,45,43,41];
+    for(let i=0;i<16;i++) if(i<c) q.T(o+i,sq[i], i%4===0 ? 'h' : 'm'); [0,6,10].forEach(i => { if(i<c) q.K(o+i, i===0 ? 'h' : 'm'); }); if(8<c) q.RS(o+8); },
+  pedal8:(q,o,c) => { for(let i=0;i<16;i+=2) if(i<c) q.P(o+i, i%4===0 ? 'h' : 'm');
+    [0,4,8,12].forEach(i => { if(i<c) q.D(o+i, i===0 ? 'h' : 'm'); }); [0,3,6,10,11].forEach(i => { if(i<c) q.K(o+i, i===0 ? 'h' : 'm'); }); if(4<c) q.S(o+4); if(12<c) q.S(o+12); },
+  pedal16:(q,o,c) => { for(let i=0;i<16;i++) if(i<c) q.P(o+i, i%4===0 ? 'h' : (i%2===0 ? 'm' : 's'));
+    if(4<c) q.S(o+4); if(12<c) q.S(o+12); [7,15].forEach(i => { if(i<c) q.S(o+i,'g'); }); [0,6,10].forEach(i => { if(i<c) q.K(o+i, i===0 ? 'h' : 'm'); });
+    for(let i=0;i<16;i+=4) if(i<c) q.D(o+i,'m'); },
+  pedalsplash:(q,o,c) => { [0,4,8,12].forEach(i => { if(i<c) q.P(o+i, i===0 ? 'h' : 'm'); }); if(2<c){ q.HN(o+2,46,'m'); } if(6<c){ q.HN(o+6,25,'m'); } if(10<c){ q.HN(o+10,46,'h'); } if(14<c){ q.HN(o+14,26,'m'); }
+    [3,7,11,15].forEach(i => { if(i<c) q.P(o+i,'s'); }); if(4<c) q.S(o+4); if(12<c) q.S(o+12); [0,8,10].forEach(i => { if(i<c) q.K(o+i, i===0 ? 'h' : 'm'); }); },
+  hfoot:(q,o,c) => { for(let i=0;i<16;i++) if(i<c) q.H(o+i, i%4===0 ? 'm' : 's'); [0,4,8,12].forEach(i => { if(i<c) q.P(o+i,'m'); });
+    if(4<c) q.S(o+4); if(12<c) q.S(o+12); [0,7,10].forEach(i => { if(i<c) q.K(o+i, i===0 ? 'h' : 'm'); }); if(14<c) q.O(o+14,'h'); },
+  funk:(q,o,c) => { for(let i=0;i<16;i++) if(i<c) q.H(o+i, i%4===0 ? 'h' : (i%2===0 ? 'm' : 's'));
+    if(4<c) q.SS(o+4); if(12<c) q.S(o+12,'m'); [7,9,15].forEach(i => { if(i<c) q.S(o+i,'g'); });
+    [0,6,10].forEach(i => { if(i<c) q.K(o+i, i===0 ? 'h' : 'm'); }); [4,12].forEach(i => { if(i<c) q.P(o+i,'m'); }); }
+};
+// ----- сбивки: начинаются со 16-й c (после грува)
+const FB = {
+  toms:(q,o,c) => { const n = 16-c; for(let j=0;j<n;j++) q.T(o+c+j,T6[j%6], j<n/2 ? 'm' : 'h'); q.K(o+c,'h'); },
+  trip:(q,o,c) => { const n = Math.floor((16-c)*3/4); for(let j=0;j<n;j++) q.T(o+c+j*4/3,T6[j%6], j<n/2 ? 'm' : 'h'); q.K(o+c,'h'); },
+  roll32:(q,o,c) => { const n = (16-c)*2; for(let j=0;j<n;j++) q.T(o+c+j*0.5,T6[(j>>2)%6], j<n/2 ? 'm' : 'h'); q.K(o+c,'h'); },
+  updown:(q,o,c) => { const seq = [41,43,45,47,48,50,50,48,47,45,43,41,41,43,45,47]; for(let j=0;j<16-c;j++) q.T(o+c+j,seq[j], j%4===0 ? 'h' : 'm'); },
+  dblkick:(q,o,c) => { for(let j=0;j<16-c;j++){ q.T(o+c+j,T6[(j>>1)%6], j<(16-c)/2 ? 'm' : 'h'); q.K(o+c+j, j%2 ? 'm' : 'h'); } },
+  flam:(q,o,c) => { for(let j=0;j<(16-c)/2;j++){ const st = o+c+j*2, n = T6[j%6]; q.T(st-0.18,n,'s'); q.T(st,n,'h'); } },
+  snaretom:(q,o,c) => { for(let j=0;j<16-c;j++){ if(j%2) q.T(o+c+j,T6[(j>>1)%6],'h'); else q.S(o+c+j,'m'); } for(let j=0;j<16-c;j+=2) q.K(o+c+j,'h'); },
+  hat:(q,o,c) => { for(let j=0;j<16-c;j++){ if(j%2) q.H(o+c+j,'s'); else q.HN(o+c+j,[24,25,26,46][Math.min(3,j>>1)],'m'); } q.P(o+15,'m'); q.RS(o+c+4,'h'); },
+  snare:(q,o,c) => { for(let j=0;j<16-c;j++) q.S(o+c+j, j<(16-c)-2 ? 'm' : 'h'); q.K(o+c,'h'); }
+};
+// ----- план: [[грув, сбивка|null, c, опции], ...] → демо
+function P(name,bpm,bars,end){
+  return {name, fn:() => { const q = mkSeq(bpm);
+    bars.forEach((p,b) => { const o = b*16, c = p[1] ? (p[2] || 8) : 16, op = p[3] || {};
+      GB[p[0]](q,o,c,op); if(p[1]) FB[p[1]](q,o,c,op);
+      if(b%4 === 0 && p[0] !== 'china') q.C(o);
+    });
+    const e = bars.length*16; if(end) end(q,e); else { q.C(e); q.K(e,'h'); }
+    return fin(q); }};
+}
+const rp = (n,x) => Array.from({length:n},() => x);
+const chinaEnd = (q,e) => { q.CH2(e,'h'); q.K(e,'h'); q.C(e); q.RS(e); };
+
+// ----- случайная вариация
+function randomDemo(){
+  const bpm = 70+Math.floor(Math.random()*120), q = mkSeq(bpm,(Math.random()*1e9|0)+1);
+  const pick = a => a[Math.floor(rnd()*a.length)];
+  const pool = bpm < 100 ? ['half','china','rock','funk'] : bpm < 150 ? ['rock','ride','dbl','hatopen','china','h16','funk'] : ['dbl','gallop','skank','blast','ride'];
+  const fills = ['toms','trip','roll32','updown','dblkick','flam','snaretom','hat','snare'];
+  const gA = pick(pool), gB = pick(pool), fl = pick(fills), fl2 = pick(fills);
+  const chinaPats = [[[0,'h'],[6,'m'],[10,'m']],[[0,'h'],[3,'m'],[6,'m'],[10,'h'],[13,'m']],[[0,'h'],[4,'h'],[8,'h'],[12,'h']]];
+  for(let bar=0;bar<8;bar++){
+    const o = bar*16, g = bar < 4 ? gA : gB, fillBar = (bar%4 === 3), c = fillBar ? pick([8,12]) : 16;
+    const op = {pat:pick(chinaPats), open:pick([46,24,25,26]), k:[0].concat([2,3,6,8,10,11,14].filter(() => rnd() < 0.45)), extraK:[1,2,3,5,7,9,11,13,15].filter(() => rnd() < 0.4), ghost:[7,9,15].filter(() => rnd() < 0.5)};
+    GB[g](q,o,c,op); if(fillBar) FB[bar < 4 ? fl : fl2](q,o,c,op);
+    if(bar%4 === 0 && g !== 'china') q.C(o);
+  }
+  q.C(128); q.K(128,'h'); q.RS(128);
+  return {name:`Случайная · ${bpm} bpm · ${gA}/${gB} + ${fl}/${fl2}`, notes:fin(q)};
+}
+
+const DEMO_GROUPS = [
+ {group:'Брейкдауны на China 2', items:[
+ {name:'Брейкдаун · 78 bpm', fn:() => { const q = mkSeq(78);
+   for(let bar=0;bar<8;bar++){ const o = bar*16;
+     if(bar < 2){                                      // риф: чайна и бочка в унисон
+       [[0,'h'],[6,'m'],[10,'m']].forEach(([st,l]) => { q.CH2(o+st,l); q.K(o+st,'h'); });
+       q.RS(o+8,'h'); if(bar === 1) q.K(o+13,'m');
+     } else if(bar < 4){                               // чайна восьмыми, двойная бочка на акцентах
+       for(let i=0;i<16;i+=2) q.CH2(o+i, i%8 === 0 ? 'h' : 'm');
+       [0,2,3,6,8,10,11,14].forEach(i => q.K(o+i, i%8 === 0 ? 'h' : 'm'));
+       q.RS(o+8,'h'); q.S(o+7,'g'); q.S(o+15,'g');
+     } else if(bar < 6){                               // тяжёлый half-time
+       [0,4,8,12].forEach(i => { q.CH2(o+i,'h'); q.K(o+i,'h'); });
+       q.RS(o+8,'h'); [12,13,14,15].forEach(i => q.K(o+i,'m'));
+       if(bar === 5) [[12,50],[13,47],[14,45],[15,43]].forEach(([st,n]) => q.T(o+st,n,'h'));
+     } else if(bar === 6){                             // стопы в унисон
+       [0,3,6,10,11].forEach(i => { q.CH2(o+i, i === 0 ? 'h' : 'm'); q.K(o+i, i === 0 ? 'h' : 'm'); });
+       q.RS(o+8,'h');
+     } else {                                          // финальная сбивка по томам
+       q.CH2(o,'h'); q.K(o,'h'); q.RS(o+4,'h');
+       [50,48,47,45,43,41,43,41].forEach((n,j) => q.T(o+8+j,n,j < 4 ? 'm' : 'h'));
+       [8,10,12,14].forEach(i => q.K(o+i,'h'));
+     }
+   }
+   q.CH2(128,'h'); q.K(128,'h'); q.C(128); q.RS(128); return fin(q); }},
+  P('Стоп-тайм · 62 bpm',62,[...rp(2,['china',null,16,{pat:[[0,'h'],[8,'h']]}]),['china','toms',12,{pat:[[0,'h'],[8,'h']]}],['china','flam',12,{pat:[[0,'h'],[8,'m']]}],...rp(2,['china',null,16,{pat:[[0,'h'],[6,'h'],[8,'h']]}]),['china','trip',8,{pat:[[0,'h'],[4,'h']]}],['china','roll32',8,{pat:[[0,'h']]}]],chinaEnd),
+  P('Синкопы · 90 bpm',90,[...rp(2,['china',null,16,{pat:[[0,'h'],[3,'m'],[6,'m'],[10,'h'],[13,'m']],ghost:[7,15]}]),['china','toms',12,{pat:[[0,'h'],[3,'m'],[6,'m']]}],['china','flam',12,{pat:[[0,'h'],[3,'m'],[6,'m'],[10,'m']]}],...rp(2,['china',null,16,{pat:[[0,'h'],[3,'m'],[7,'m'],[10,'h'],[12,'m'],[14,'m']]}]),['china','updown',8,{pat:[[0,'h'],[3,'m']]}],['china','roll32',8,{pat:[[0,'h']]}]],chinaEnd),
+  P('Двойная бочка под чайной · 84 bpm',84,[...rp(3,['china',null,16,{pat:[[0,'h'],[4,'h'],[8,'h'],[12,'h']],extraK:[1,2,3,5,6,7,9,10,11,13,14,15]}]),['china','dblkick',8,{pat:[[0,'h'],[4,'h']],extraK:[1,2,3,5,6,7]}],...rp(3,['china',null,16,{pat:[[0,'h'],[3,'m'],[4,'h'],[8,'h'],[12,'h']],extraK:[1,2,5,6,7,9,10,11,13,14,15]}]),['china','snaretom',8,{pat:[[0,'h'],[4,'h']]}]],chinaEnd),
+  P('Чаггинг восьмыми · 100 bpm',100,[...rp(3,['china',null,16,{pat:[0,2,4,6,8,10,12,14].map(i => [i,i%8===0 ? 'h' : 'm'])}]),['china','toms',8,{pat:[0,2,4,6].map(i => [i,'m'])}],...rp(3,['china',null,16,{pat:[0,2,4,6,8,10,12,14].map(i => [i,i%4===0 ? 'h' : 'm']),ghost:[7,15]}]),['china','trip',8,{pat:[0,2,4,6].map(i => [i,'h'])}]],chinaEnd),
+  P('Полиритм 3+3+2 · 110 bpm',110,[...rp(3,['china',null,16,{pat:[[0,'h'],[3,'m'],[6,'m'],[8,'h'],[11,'m'],[14,'m']]}]),['china','updown',8,{pat:[[0,'h'],[3,'m'],[6,'m']]}],...rp(3,['china',null,16,{pat:[[0,'h'],[3,'h'],[6,'m'],[8,'h'],[11,'h'],[14,'m']],extraK:[2,5,10,13]}]),['china','dblkick',8,{pat:[[0,'h'],[3,'m'],[6,'m']]}]],chinaEnd)
+ ]},
+ {group:'Сбивки на открытом хэте', items:[
+ {name:'Сбивки, открытость 24→46 · 128 bpm', fn:() => { const q = mkSeq(128);
+   for(let bar=0;bar<8;bar++){ const o = bar*16, fill = (bar%4 === 3);
+     q.K(o,'h'); q.K(o+8,'m'); if(bar%2) q.K(o+10,'m');
+     q.S(o+4);
+     if(!fill){
+       q.S(o+12);
+       if(bar < 4){
+         for(let i=0;i<14;i+=2) q.H(o+i, i%4 === 0 ? 'h' : 'm');
+         q.O(o+14,'h'); q.P(o+15,'s');                  // открытый на «и» четвёртой доли, закрыт педалью
+       } else {
+         for(let i=0;i<16;i+=2){ if(i%4 === 0) q.H(o+i,'h'); else q.O(o+i, i === 14 ? 'h' : 'm'); }
+         [3,7,11,15].forEach(i => q.P(o+i,'s'));        // открытые на каждой «и», ногой закрывает
+       }
+     } else {                                           // сбивка: открытость нарастает 24 → 25 → 26 → 46
+       for(let i=0;i<8;i+=2) q.H(o+i,'m');
+       q.HN(o+8,24,'m'); q.H(o+9,'s'); q.HN(o+10,25,'m'); q.H(o+11,'s');
+       q.RS(o+12,'h'); q.HN(o+12,26,'h'); q.H(o+13,'m'); q.HN(o+14,46,'h'); q.P(o+15,'m');
+     }
+   }
+   q.C(128); q.K(128,'h'); q.RS(128); return fin(q); }},
+  P('Открытый на «и» · 112 bpm',112,[...rp(3,['hatopen',null,16]),['hatopen','hat',8],...rp(3,['hatopen',null,16,{open:25}]),['hatopen','hat',8]]),
+  P('16-е открыто-закрыто · 140 bpm',140,[...rp(3,['h16',null,16]),['h16','hat',8],...rp(3,['h16',null,16]),['h16','snare',12]]),
+  P('Нарастающее открытие 24→46 · 118 bpm',118,[['hatopen',null,16,{open:24}],['hatopen',null,16,{open:25}],['hatopen',null,16,{open:26}],['hatopen','hat',8,{open:46}],['hatopen',null,16,{open:24}],['hatopen',null,16,{open:25}],['hatopen',null,16,{open:26}],['hatopen','hat',4,{open:46}]]),
+  P('Стук ногой + сбивка · 100 bpm',100,[...rp(3,['hfoot',null,16]),['hfoot','hat',8],...rp(3,['hfoot',null,16]),['hfoot','hat',4]]),
+  P('Фанк, ghost-снейр · 96 bpm',96,[...rp(3,['funk',null,16]),['funk','hat',8],...rp(3,['funk',null,16]),['funk','hat',8]])
+ ]},
+ {group:'Сбивки на томах', items:[
+ {name:'Кольцо, двойные, снейр–том · 150 bpm', fn:() => { const q = mkSeq(150);
+   const T6 = [50,48,47,45,43,41];
+   for(let bar=0;bar<8;bar++){ const o = bar*16;
+     if(bar%2 === 0){                                   // грув
+       for(let i=0;i<16;i+=2) q.H(o+i, i%4 === 0 ? 'h' : 'm');
+       q.S(o+4); q.S(o+12); [0,8,10].forEach(i => q.K(o+i, i === 0 ? 'h' : 'm')); if(bar%4 === 0) q.C(o);
+     } else {
+       q.H(o,'h'); q.H(o+2); q.S(o+4,'m'); q.K(o);
+       if(bar === 1) for(let j=0;j<8;j++) q.T(o+8+j, T6[j%6], j < 4 ? 'm' : 'h');                    // кольцо по томам 16-ми
+       if(bar === 3) [50,50,48,48,47,47,43,43].forEach((n,j) => q.T(o+8+j,n,j%2 ? 'm' : 'h'));        // двойные удары по каждому тому
+       if(bar === 5){ for(let j=0;j<8;j++){ if(j%2) q.T(o+8+j,T6[(j>>1)%6],'h'); else q.S(o+8+j,'m'); } [8,10,12,14].forEach(i => q.K(o+i,'h')); }  // снейр–том, бочка под низом
+       if(bar === 7){ for(let j=0;j<10;j++) q.T(o+6+j, T6[j%6], j < 5 ? 'm' : 'h'); q.K(o+6,'h'); }    // длинная сбивка
+     }
+   }
+   q.C(128); q.K(128,'h'); q.C2(128); return fin(q); }},
+  P('Триоли · 120 bpm',120,[...rp(3,['rock',null,16]),['rock','trip',8],...rp(3,['rock',null,16]),['rock','trip',4]]),
+  P('32-е ролл · 110 bpm',110,[...rp(3,['rock',null,16]),['rock','roll32',8],...rp(3,['ride',null,16]),['ride','roll32',8]]),
+  P('Томы + двойная бочка · 170 bpm',170,[...rp(3,['dbl',null,16]),['dbl','dblkick',8],...rp(3,['gallop',null,16]),['gallop','dblkick',4]]),
+  P('Вверх-вниз · 135 bpm',135,[...rp(3,['rock',null,16]),['rock','updown',8],...rp(3,['ride',null,16]),['ride','updown',4]]),
+  P('Флэмы · 100 bpm',100,[...rp(3,['half',null,16]),['half','flam',8],...rp(3,['half',null,16]),['half','flam',4]]),
+  P('Снейр–том · 125 bpm',125,[...rp(3,['rock',null,16]),['rock','snaretom',8],...rp(3,['skank',null,16]),['skank','snaretom',8]])
+ ]},
+ {group:'Грувы на томах и педали хэта', items:[
+  P('Грув на томах · 100 bpm',100,[...rp(3,['tomgrv',null,16]),['tomgrv','toms',8],...rp(3,['tomgrv',null,16]),['tomgrv','trip',8]]),
+  P('Томы + двойная бочка · 140 bpm',140,[...rp(3,['tomdbl',null,16]),['tomdbl','dblkick',8],...rp(3,['tomdbl',null,16]),['tomdbl','roll32',8]]),
+  P('Томы по кругу · 120 bpm',120,[...rp(3,['tomrr',null,16]),['tomrr','flam',8],...rp(3,['tomrr',null,16]),['tomrr','updown',4]]),
+  P('Педаль хэта, восьмые · 100 bpm',100,[...rp(3,['pedal8',null,16]),['pedal8','toms',8],...rp(3,['pedal8',null,16]),['pedal8','snaretom',8]]),
+  P('Педаль хэта, 16-е · 90 bpm',90,[...rp(3,['pedal16',null,16]),['pedal16','hat',8],...rp(3,['pedal16',null,16]),['pedal16','toms',8]]),
+  P('Хэт ногой + открытые · 110 bpm',110,[...rp(3,['pedalsplash',null,16]),['pedalsplash','hat',8],...rp(3,['pedalsplash',null,16]),['pedalsplash','trip',8]])
+ ]},
+ {group:'Мьют (глушение тарелок рукой)', items:[
+  {name:'Крэши с мьютом · 120 bpm', fn:() => { const q = mkSeq(120);
+    for(let bar=0;bar<8;bar++){ const o = bar*16;
+      GB.ride(q,o,16,{});
+      if(bar%4 === 0){ q.C(o); q.CM(o+6); }
+      if(bar%4 === 1){ q.C2(o+8); q.C2M(o+14); }
+      if(bar%4 === 2){ q.CR(o); q.CRM(o+4); q.C(o+8); q.CM(o+12); }
+      if(bar%4 === 3){ q.C2(o); q.C2M(o+3); q.CR(o+8); q.CRM(o+12); }
+    }
+    q.C(128); q.K(128,'h'); q.CM(134); return fin(q); }},
+  {name:'Стопы с мьютом · 150 bpm', fn:() => { const q = mkSeq(150);
+    for(let bar=0;bar<8;bar++){ const o = bar*16;
+      [[0,'C','CM'],[3,'C2','C2M'],[6,'CR','CRM'],[10,'C','CM']].forEach(([st,hit,mu],j) => { q[hit](o+st); q.K(o+st,'h'); q[mu](o+st+1.6); q.S(o+8,'m'); });
+      if(bar%4 === 3) [50,47,43,41].forEach((n,j) => q.T(o+12+j,n,'h'));
+    }
+    q.C(128); q.K(128,'h'); q.CM(133); return fin(q); }}
+ ]},
+ {group:'Миксы', items:[
+  P('Микс 1 · 160 bpm',160,[['dbl',null,16],['dbl','toms',8],['gallop',null,16],['gallop','dblkick',8],['china',null,16,{pat:[[0,'h'],[6,'m'],[10,'m']]}],['china','flam',8,{pat:[[0,'h'],[6,'m']]}],['hatopen',null,16],['hatopen','hat',8]],chinaEnd),
+  P('Микс 2 · 140 bpm',140,[['rock',null,16],['rock','trip',8],['h16',null,16],['h16','hat',8],['half',null,16],['half','roll32',8],['china',null,16,{pat:[[0,'h'],[3,'m'],[6,'m'],[10,'h']]}],['china','updown',4,{pat:[[0,'h']]}]],chinaEnd)
+ ]}
+];
+const DEMOS = DEMO_GROUPS.flatMap(g => g.items);
+
+/* ---------- Слои по velocity (значения из библиотеки; правятся в панели) ---------- */
+// [макс. velocity для ghost, для soft, для medium]; выше последнего — hard
+const LAY = {
+  kick:[0,105,116],     // ≥117 сильный · 106–116 средний · <106 слабый
+  snare:[63,92,109],    // ≥110 сильный · 93–109 средний · 64–92 слабый · ≤63 ghost
+  hat:[57,105,125],     // ≥126 сильный · 106–125 средний · 58–105 слабый · ≤57 ghost
+  cym:[57,105,125],     // крэши, райд, чайна, сплэш, спок — как хэт
+  tom:[63,105,125]      // ≥126 сильный · 106–125 средний · 64–105 слабый · ≤63 ghost
+};
+const LAYNAMES = ['GHOST','SOFT','MED','HARD'];
+const LVF = [0.28,0.5,0.75,1];
+function layerKind(d){
+  if(d.id === 'kick') return 'kick';
+  if(d.id === 'snare') return 'snare';
+  if(d.id === 'hat' || d.id === 'hatpedal') return 'hat';
+  if(d.type === 'cymbal') return 'cym';
+  return 'tom';
+}
+function layerOf(d,vel){
+  const L = LAY[layerKind(d)];
+  return vel <= L[0] ? 0 : vel <= L[1] ? 1 : vel <= L[2] ? 2 : 3;
+}
+
+/* ---------- Звук (синтез по слоям + комната; это не сэмплы Toontrack) ---------- */
+let AC = null, master = null, NB = null, dryBus = null, soundOn = true;
+function buildAudio(ctx){
+  {
+    AC = ctx;
+    const comp = AC.createDynamicsCompressor();
+    comp.threshold.value = -16; comp.ratio.value = 4; comp.attack.value = 0.003; comp.release.value = 0.15;
+    master = AC.createGain(); master.gain.value = 0.9;
+    const conv = AC.createConvolver(), wet = AC.createGain(); wet.gain.value = 0.16;
+    const len = Math.floor(AC.sampleRate*1.4), ir = AC.createBuffer(2,len,AC.sampleRate);
+    for(let c=0;c<2;c++){ const dd = ir.getChannelData(c); for(let i=0;i<len;i++) dd[i] = (Math.random()*2-1)*Math.pow(1-i/len,2.8); }
+    conv.buffer = ir;
+    master.connect(comp); master.connect(conv); conv.connect(wet); wet.connect(comp); comp.connect(AC.destination);
+    dryBus = AC.createGain(); dryBus.connect(comp);
+    const nl = Math.floor(AC.sampleRate*2.2); NB = AC.createBuffer(1,nl,AC.sampleRate);
+    const nd = NB.getChannelData(0); for(let i=0;i<nl;i++) nd[i] = Math.random()*2-1;
+  }
+}
+function ensureAudio(){
+  if(!AC) buildAudio(new (window.AudioContext || window.webkitAudioContext)());
+  if(AC.state === 'suspended') AC.resume();
+}
+let OUT = null;
+const BUSL = {};
+function newBus(id,smp,t){ const g = AC.createGain(); g.connect(smp ? dryBus : master); const L = BUSL[id] || (BUSL[id] = []); L.push({g,t}); if(L.length > 8) L.shift(); return g; }
+function muteCymbal(id,t){ (BUSL[id] || []).forEach(b => { if(t-b.t < 6){ b.g.gain.cancelScheduledValues(t); b.g.gain.setTargetAtTime(0,t,0.012); } }); }
+function mutedHit(d,lv,a,t){
+  const D = [0.05,0.08,0.11,0.14][lv]; OUT = null;
+  noise(t,{bp:3200,q:0.8,decay:D,gain:a*0.35}); noise(t,{hp:6500,decay:0.02,gain:a*0.2});
+  metal(t,{decay:D,gain:a*0.02,hp:4000,mult:1.5}); tone(t,{f:240,decay:0.03,gain:a*0.08});
+}
+function tone(t,{f,f2,decay,gain,type='sine'}){
+  const o = AC.createOscillator(), g = AC.createGain();
+  o.type = type; o.frequency.setValueAtTime(f,t);
+  if(f2) o.frequency.exponentialRampToValueAtTime(f2,t+Math.min(decay,0.14));
+  g.gain.setValueAtTime(gain,t); g.gain.exponentialRampToValueAtTime(0.001,t+decay);
+  o.connect(g); g.connect(OUT || master); o.start(t); o.stop(t+decay+0.05);
+}
+function noise(t,{hp,bp,q=1,decay,gain}){
+  const s = AC.createBufferSource(); s.buffer = NB;
+  const g = AC.createGain(); g.gain.setValueAtTime(gain,t); g.gain.exponentialRampToValueAtTime(0.001,t+decay);
+  let n = s;
+  if(hp){ const f = AC.createBiquadFilter(); f.type='highpass'; f.frequency.value=hp; n.connect(f); n=f; }
+  if(bp){ const f = AC.createBiquadFilter(); f.type='bandpass'; f.frequency.value=bp; f.Q.value=q; n.connect(f); n=f; }
+  n.connect(g); g.connect(OUT || master); s.start(t); s.stop(t+decay+0.05);
+}
+const HF = [205.3,304.4,369.6,522.7,540,800];
+function metal(t,{decay,gain,hp=6500,mult=1}){
+  const g = AC.createGain(); g.gain.setValueAtTime(gain,t); g.gain.exponentialRampToValueAtTime(0.001,t+decay);
+  const f = AC.createBiquadFilter(); f.type='highpass'; f.frequency.value=hp;
+  g.connect(f); f.connect(OUT || master);
+  HF.forEach(fr => { const o = AC.createOscillator(); o.type='square'; o.frequency.value=fr*mult; o.connect(g); o.start(t); o.stop(t+decay+0.05); });
+}
+const TOMF = {tom1:235, tom2:180, floor1:128, floor2:95};
+const AMP = [0.3,0.55,0.8,1.0];
+
+/* ---------- Сэмплер: свои сэмплы EZX (из баунса Superior Drummer) ---------- */
+const SMP = {};                 // SMP[нота][слой] = [AudioBuffer, ...] — несколько = round-robin
+let useSamples = false, chokeG = null, TEST_EV = null;
+function addSample(note,lv,buf){ if(!SMP[note]) SMP[note] = {}; if(!SMP[note][lv]) SMP[note][lv] = []; SMP[note][lv].push(buf); }
+function smpCount(){ let n = 0; for(const k in SMP) for(const l in SMP[k]) n += SMP[k][l].length; return n; }
+function pickSample(d,note,lv){
+  let by = SMP[note];
+  if(!by){ let bd = 1e9; for(const k in SMP) if(noteMap[k] === d.id){ const dd = Math.abs(k-note); if(dd < bd){ bd = dd; by = SMP[k]; } } }
+  if(!by) return null;
+  for(let off=0;off<4;off++) for(const l of [lv-off,lv+off]) if(l >= 0 && l < 4 && by[l] && by[l].length){
+    const arr = by[l]; let i = Math.floor(Math.random()*arr.length);
+    if(arr.length > 1 && i === arr._last) i = (i+1)%arr.length;
+    arr._last = i; return arr[i];
+  }
+  return null;
+}
+function chokeOpenHat(t){ if(chokeG){ chokeG.gain.setTargetAtTime(0,t,0.012); chokeG = null; } }   // закрытый хэт/педаль глушит открытый
+function playSample(d,note,vel,lv,t,bypass){
+  const buf = pickSample(d,note,lv); if(!buf) return false;
+  const src = AC.createBufferSource(); src.buffer = buf;
+  const g = AC.createGain(); g.gain.value = 0.82+0.18*vel/127;
+  src.connect(g); g.connect((d.type === 'cymbal' && !bypass) ? newBus(d.id,true,t) : dryBus); src.start(t);
+  if(d.id === 'hat' && HAT_OPEN[note] > 0) chokeG = g;
+  return true;
+}
+
+/* ---------- Синтез с «модерн-метал» голосом (запасной вариант без сэмплов) ---------- */
+function playSound(d,note,vel,when){
+  if(!soundOn || !AC) return;
+  const lv = layerOf(d,vel), a = AMP[lv]*(0.88+0.12*vel/127), t = Math.max(when,AC.currentTime);
+  if(d.id === 'hatpedal' || (d.id === 'hat' && !HAT_OPEN[note])) chokeOpenHat(t);
+  if(d.type === 'cymbal' && isMute(note)){                                         // глушение: гасим звенящий удар и играем короткий «заглушённый»
+    muteCymbal(d.id,t);
+    if(useSamples && playSample(d,note,vel,lv,t,true)) return;
+    mutedHit(d,lv,a,t); return;
+  }
+  if(useSamples && playSample(d,note,vel,lv,t)) return;
+  OUT = d.type === 'cymbal' ? newBus(d.id,false,t) : null;
+  switch(d.id){
+    case 'kick':                                   // триггерная бочка: короткий низ + жёсткий щелчок
+      tone(t,{f:125+lv*8,f2:46,decay:0.2+0.03*lv,gain:a});
+      tone(t,{f:62,f2:50,decay:0.17,gain:a*0.5});
+      noise(t,{bp:4200+lv*500,q:1.3,decay:0.016,gain:a*(0.18+0.12*lv)}); break;
+    case 'snare': {                                // плотный, яркий, короткий хвост
+      const dec = [0.05,0.1,0.14,0.18][lv];
+      tone(t,{f:235,f2:200,decay:dec*0.55,gain:a*0.4,type:'triangle'});
+      if(lv >= 2) tone(t,{f:470,decay:0.07,gain:a*0.12});
+      if(isSide(note)){ noise(t,{bp:3600,q:1.6,decay:0.035,gain:a*0.55}); tone(t,{f:1000,decay:0.03,gain:a*0.2}); }
+      else {
+        noise(t,{bp:3400,q:0.9,decay:dec,gain:a*0.8});
+        if(lv >= 2) noise(t,{hp:7000,decay:0.02,gain:a*0.35});
+        if(isRim(note)){ tone(t,{f:1100,f2:700,decay:0.04,gain:a*0.3,type:'square'}); noise(t,{hp:3500,decay:0.06,gain:a*0.5}); }
+      }
+      break; }
+    case 'tom1': case 'tom2': case 'floor1': case 'floor2': {
+      const b = TOMF[d.id];
+      tone(t,{f:b*1.55,f2:b,decay:b < 130 ? 0.34 : 0.24,gain:a*0.95});
+      noise(t,{bp:2600,q:0.9,decay:0.02,gain:a*(0.08+0.07*lv)}); break; }
+    case 'hat': {
+      const oa = HAT_OPEN[note] || 0;
+      const dec = oa > 0 ? (0.1+0.3*oa)*[0.85,0.95,1.05,1.15][lv] : [0.025,0.035,0.05,0.065][lv];
+      noise(t,{hp:9500,decay:dec,gain:a*0.34}); metal(t,{decay:dec,gain:a*0.06,hp:8000}); break; }
+    case 'hatpedal': noise(t,{hp:5500,decay:0.03,gain:a*0.15}); break;
+    case 'crash1': case 'crash2': {
+      const D = [0.45,0.8,1.15,1.45][lv]*0.9;
+      noise(t,{hp:4200,decay:D,gain:a*0.36}); noise(t,{bp:8500,q:0.5,decay:D*0.8,gain:a*0.16});
+      metal(t,{decay:D*0.9,gain:a*0.035,hp:5000,mult:1.7}); break; }
+    case 'splash': {
+      const D = [0.15,0.26,0.36,0.48][lv];
+      noise(t,{hp:6500,decay:D,gain:a*0.36}); metal(t,{decay:D,gain:a*0.03,hp:7000,mult:2.2}); break; }
+    case 'china': case 'china2': {                 // трэшевая, быстро гаснет
+      const D = [0.3,0.5,0.7,0.9][lv];
+      noise(t,{hp:2600,decay:D,gain:a*0.42}); noise(t,{bp:5200,q:0.4,decay:D*0.7,gain:a*0.2});
+      metal(t,{decay:D,gain:a*0.06,hp:3200,mult:0.9}); break; }
+    case 'spock': {
+      const D = [0.35,0.6,0.9,1.15][lv];
+      noise(t,{hp:3200,decay:D,gain:a*0.38}); metal(t,{decay:D,gain:a*0.045,hp:3800,mult:1.3}); break; }
+    case 'crashride': {
+      const D = [0.35,0.6,0.9,1.15][lv];
+      noise(t,{hp:4200,decay:D,gain:a*0.28}); tone(t,{f:1180,decay:0.35,gain:a*0.06}); break; }
+    case 'ride': {                                // райд: тик палочки + металлический «пинг» + шелест
+      const bell = isBell(note), wash = (note === 59 ? 1.8 : 1), D = [0.5,0.9,1.4,1.9][lv];
+      noise(t,{hp:6500,decay:0.012,gain:a*0.28});                                        // удар палочкой
+      [[722,0.10,0.9],[1054,0.08,0.7],[1573,0.06,0.55],[2144,0.05,0.45],[2831,0.04,0.35]].forEach(([fq,gn,dc]) => {
+        tone(t,{f:fq*(bell ? 1.55 : 1),decay:(bell ? dc*1.6 : dc)*(0.6+0.15*lv),gain:a*gn*(bell ? 1.9 : 1)});
+      });
+      if(!bell){
+        noise(t,{bp:7500,q:0.7,decay:D*wash,gain:a*0.10*wash});                          // «пост-шелест» чаши
+        noise(t,{hp:9500,decay:D*0.8*wash,gain:a*0.05*wash});
+        metal(t,{decay:0.6,gain:a*0.02,hp:5200,mult:2.4});
+      } else {
+        tone(t,{f:2360,decay:1.3,gain:a*0.14}); tone(t,{f:3540,decay:0.9,gain:a*0.08});  // яркий колокол
+      }
+      break; }
+  }
+  OUT = null;
+}
+
+/* ---------- Состояние проигрывателя ---------- */
+let notes = [], dur = 0, pos = 0, playing = false, nextIdx = 0, lastTs = 0;
+let speed = 1, loop = true, showNotes = false, dragging = false, songName = '';
+let pending = [];
+const flash = {};
+const footHit = [{t:-1e9,lv:0},{t:-1e9,lv:0}];
+const kickHit = [{t:-1e9,lv:0},{t:-1e9,lv:0}];   // 0 левая нога, 1 правая
+let lKickT = -1e9, lastHitX = 210, NOW = 0;
+const lfoot = {mix:0, from:0, to:0, t0:-1e9, dur:1, lift:0, lastT:-1e9}, look = {x:0};
+const muteT = {};
+const muteAmt = (id,now) => { const a = now-(muteT[id] || -1e9); return a < 0 ? 0 : (a < 520 ? 1-a/520 : 0); };
+const padHit = {hat:{t:-1e9,lv:0}, kL:{t:-1e9,lv:0}, kR:{t:-1e9,lv:0}};   // нажатия педалей (для анимации колодок)
+// Левая нога живёт между педалью хэта (0) и второй педалью бочки (1): заранее переставляется, поднимаясь над педалями
+function updateLeftFoot(now){
+  let next = null;
+  for(const p of pending) if(p.foot === 0 && (p.id === 'kick' || p.id === 'hatpedal') && p.t > now-40 && (!next || p.t < next.t)) next = p;
+  let want = lfoot.to;
+  if(next) want = next.id === 'kick' ? 1 : 0;
+  else if(now-lfoot.lastT > 1100) want = 0;                    // без дела возвращается на педаль хэта
+  if(want !== lfoot.to){
+    const avail = next ? Math.max(60,next.t-now-25) : 240;
+    lfoot.from = lfoot.mix; lfoot.to = want; lfoot.t0 = now; lfoot.dur = Math.min(180,avail);
+  }
+  const u = clamp((now-lfoot.t0)/lfoot.dur,0,1);
+  lfoot.mix = lerp(lfoot.from,lfoot.to,smoothS(u));
+  lfoot.lift = u < 1 ? Math.sin(Math.PI*u) : 0;                 // стопа отрывается от педали при переносе
+}
+// Положение педали p: 0.25 — покой, 0.85 — колотушка отведена (пятка поднята), 0 — удар по пластику.
+// От него зависят и колодка, и стопа, и колотушка — поэтому всё двигается синхронно.
+function pedalP(nm,now){
+  let pre = 0;
+  for(const q of pending) if(q.t > now && ((nm === 'hat' && q.id === 'hatpedal') || (nm === 'kL' && q.id === 'kick' && q.foot === 0) || (nm === 'kR' && q.id === 'kick' && q.foot === 1))) pre = Math.max(pre,1-(q.t-now)/150);
+  if(pre > 0) return 0.25+0.6*smoothS(pre);
+  const age = now-padHit[nm].t;
+  if(age >= 0 && age < 25) return 0.85*(1-age/25);                                  // быстрый удар
+  if(age >= 25 && age < 175){ const u = (age-25)/150; return 0.25*smoothS(u)+0.3*Math.sin(Math.PI*u); }   // отскок в покой
+  return 0.25;
+}
+const pedalLift = p => clamp((p-0.25)/0.6,0,1), pedalPress = p => clamp(1-p/0.25,0,1);
+let hatOpenAmt = 0, PIN = null;
+let DT = 0.016, lastDrawT = 0, bobS = 0, bobP = 0, lastSeek = -1, lastTime = '', ENERGY = 0;
+const kS = r => 1-Math.exp(-DT*r);
+const LA = 0.16;   // упреждение, с: за это время рука успевает долететь до барабана
+
+const hands = {
+  L:{side:-1, rest:{x:186,y:540}, seg:null},
+  R:{side: 1, rest:{x:234,y:540}, seg:null}
+};
+const lean = {x:0,y:0};
+
+const REST_H = 0.5, HOVER_H = 0.3;
+let PULSE = 0, songBpm = 120;                       // PULSE: 1 на доле → 0 между долями (общий «пульс» для кистей и головы)
+const smoothS = u => { u = clamp(u,0,1); return u*u*(3-2*u); };
+function evalHand(h,now){
+  const s = h.seg;
+  if(!s){ const w = sway(h,now); return {x:h.rest.x+w.x, y:h.rest.y+w.y, h:REST_H, rw:1}; }
+  if(now < s.arrive){
+    const u = clamp((now-s.start)/(s.arrive-s.start),0,1), e = u*u*(3-2*u);
+    const dist = Math.hypot(s.to.x-s.from.x, s.to.y-s.from.y), bulge = Math.sin(Math.PI*u)*Math.min(22,dist*0.1)*h.side;   // дуга локтем наружу
+    const peak = 0.9*(s.amp||0.7), h0 = s.h0 || 0, k = 0.35;
+    let hh;
+    if(u < k) hh = lerp(h0,peak,Math.sin(u/k*Math.PI/2));                 // быстрый замах вверх (кисть)
+    else { const v = (u-k)/(1-k); hh = peak*(1-v*v); }                    // падение палочки с ускорением
+    return {x:lerp(s.from.x,s.to.x,e)+bulge, y:lerp(s.from.y,s.to.y,e), h:hh};
+  }
+  const age0 = now-s.arrive, amp = s.amp||0.7;
+  if(s.hold && age0 < s.hold) return {x:s.to.x, y:s.to.y, h:0.03, grab:true};       // рука зажимает тарелку
+  const age = age0-(s.hold||0);
+  let x = s.to.x, y = s.to.y, rw = 0;
+  // отскок палочки от головы, затем она «висит» над барабаном; после сильного крэша рука остаётся поднятой
+  let hh = HOVER_H*smoothS(age/260) + (age < 230 ? 0.55*amp/0.7*Math.sin(Math.PI*age/230) : 0);
+  if(s.ft) hh += s.ft*0.85*Math.sin(Math.PI*clamp(age/540,0,1));
+  const nx = s.next;
+  if(nx && nx.arrive-s.arrive > 520){
+    // упреждение: рука заранее плывёт к следующей цели и поднимается над ней (как у живого барабанщика, который «видит» партию)
+    const t0 = clamp((nx.arrive-s.arrive)*0.3,260,900), t1 = nx.arrive-s.arrive-175;
+    if(t1 > t0+40){
+      const u = smoothS((age-t0)/(t1-t0));
+      x = lerp(s.to.x,nx.pt.x,u); y = lerp(s.to.y,nx.pt.y,u); hh = lerp(hh,0.55,u);
+    }
+  } else if(!nx && age > 1200){                                                    // нет следующей цели (конец / живой вход) — рука расслабляется
+    const e = smoothS((age-1200)/700);
+    x = lerp(s.to.x,h.rest.x,e); y = lerp(s.to.y,h.rest.y,e); hh = lerp(hh,REST_H,e); rw = e;
+  }
+  hh += 0.07*PULSE;                                                                 // лёгкое покачивание в такт
+  if(age > 800){ const w = sway(h,now); x += w.x; y += w.y; }
+  return {x,y,h:hh,rw};
+}
+// геометрия палочки: чем выше замах, тем круче она стоит (сверху виден укороченной)
+const STICK = {back:50, butt:20};
+function stickGeo(hv){ const ang = 0.3+0.8*clamp(hv,0,1.45); return {back:STICK.back*Math.cos(ang), up:STICK.back*Math.sin(ang), ang}; }
+const sway = (h,now) => ({x:Math.sin(now/760+h.side)*3, y:Math.sin(now/530+h.side*2)*2});
+function hitPoint(d,h,note){
+  const j = () => (Math.random()-0.5)*d.r*0.25;
+  if(d.type === 'cymbal' && isMute(note)) return {x:d.x+h.side*d.r*0.8, y:d.y+d.r*0.32};              // рука хватает край тарелки   // живой разброс: палочка не попадает в одну точку
+  if(d.id === 'snare' && isRim(note)) return {x:d.x + h.side*d.r*0.62 + j()*0.3, y:d.y + d.r*0.3 + j()*0.3};   // римшот: голова + обод
+  if(d.id === 'snare' && isSide(note)) return {x:d.x + h.side*d.r*0.5, y:d.y + d.r*0.5};                          // side stick: палка лежит на ободе
+  if(d.id === 'ride' && isBell(note)) return {x:d.x + h.side*d.r*0.1 + j()*0.3, y:d.y + d.r*0.08 + j()*0.3};     // бэлл
+  if(d.type === 'cymbal') return {x:d.x + (d.id==='hat'?0:h.side*d.r*0.1) + j(), y:d.y + d.r*0.35 + j()};
+  return {x:d.x + h.side*d.r*0.28 + j(), y:d.y + d.r*0.12 + j()};
+}
+/* ---------- «Человеческая» аппликатура ----------
+   Как у живого правши: хэт и райд обычно правой, снейр левой, НО на быстрых
+   шестнадцатых хэт играется двумя руками по очереди (R L R L), а левая выходит
+   на снейр и возвращается. Одна рука не может бить чаще ~5–6 раз/с, поэтому
+   при плотных нотах руки чередуются. Для MIDI-файла аппликатура считается
+   заранее по всей партии (динамическое программирование), для живого входа — жадно. */
+const HAND = [hands.L, hands.R];
+//          [левая, правая] — «неудобство» руки для каждого барабана
+const PREF = {
+  hat:[0.4,0.4], ride:[1.5,0], crash1:[0.6,0.6], china2:[1.5,0.2],
+  crash2:[1.5,0.2], crashride:[1.5,0.2], splash:[1.2,0.2],
+  tom1:[0.4,0.4], tom2:[0.5,0.4], floor1:[0.6,0.3], floor2:[0.7,0.3], snare:[0.25,0.25]
+};
+const SNARE_MODES = {auto:[0.25,0.25], L:[0,3], R:[3,0]};
+let snareMode = 'auto';
+// Плотные 16-е по хэту/райду (обе руки в работе): бэкбит на снейре падает на сильную долю — её играет ПРАВАЯ (R L R L)
+function stickCost(h,d,t,last,samePrev,vel,dense){
+  let c = PREF[d.id][h];
+  if(d.id === 'snare' && dense && snareMode === 'auto') c = h === 0 ? 1.0 : 0.2;
+  if(d.id === 'snare' && h === 1 && layerOf(d,vel) === 0) c += 1.5;   // ghost-ноты на снейре — левой, тихо
+  if(last){
+    const gap = t-last.t;
+    if(gap < 0.03) c += 1000;                                   // одновременно одной рукой нельзя
+    else if(gap < 0.2){ const x = (0.2-gap)/0.2; c += x*x*45; }     // предел скорости одной руки (~5–6 уд./с)
+    if(gap < 0.35) c += Math.hypot(d.x-last.d.x, d.y-last.d.y)/130*0.8;  // далеко тянуться
+  }
+  if(samePrev) c += 0.25;                                        // лёгкое предпочтение чередованию
+  return c;
+}
+// ноги: бочка правой; на быстрой бочке (<180 мс) ноги чередуются (двойная педаль); педаль хэта — левой
+function planFeet(){
+  const hp = []; notes.forEach(n => { if(noteMap[n.note] === 'hatpedal') hp.push(n.t/speed); });
+  let lastFoot = 1, lastT = -9;
+  notes.forEach(n => {
+    n.foot = -1;
+    const id = noteMap[n.note];
+    if(id === 'kick'){
+      const t = n.t/speed; let f = (t-lastT < 0.18) ? 1-lastFoot : 1;
+      if(f === 0 && hp.some(x => Math.abs(x-t) < 0.22)) f = 1;      // левая нога занята хэтом — бьёт правая
+      n.foot = f; lastFoot = f; lastT = t;
+    } else if(id === 'hatpedal') n.foot = 0;
+  });
+}
+function planSticking(){
+  notes.forEach(n => n.hand = -1);
+  planFeet();
+  const hits = [];
+  notes.forEach((n,i) => {
+    const id = noteMap[n.note]; if(!id) return;
+    const d = BY[id]; if(d.type === 'kick' || d.type === 'pedal') return;
+    hits.push({i, t:n.t/speed, d, vel:n.vel});
+  });
+  hits.forEach((x,k) => {                               // плотная ли тарелка вокруг этого снейра
+    if(x.d.id !== 'snare'){ return; }
+    let cnt = 0;
+    for(let a=k-1;a>=0 && x.t-hits[a].t < 0.4;a--) if(hits[a].d.id === 'hat' || hits[a].d.id === 'ride') cnt++;
+    for(let a=k+1;a<hits.length && hits[a].t-x.t < 0.4;a++) if(hits[a].d.id === 'hat' || hits[a].d.id === 'ride') cnt++;
+    x.dense = cnt >= 6;
+  });
+  const N = hits.length; if(!N) return;
+  const S = 9, INF = 1e18;                             // состояние = (рука пред., рука пред-пред.), 2 = «нет»
+  let cost = new Float64Array(S).fill(INF); cost[8] = 0;
+  const back = new Array(N);
+  for(let k=0;k<N;k++){
+    const nc = new Float64Array(S).fill(INF), bp = new Int8Array(S).fill(-1), bh = new Int8Array(S);
+    for(let st=0;st<S;st++){
+      if(cost[st] >= INF) continue;
+      const h1 = Math.floor(st/3), h2 = st%3;
+      for(let h=0;h<2;h++){
+        let last = null;
+        if(h1 === h) last = hits[k-1]; else if(h2 === h) last = hits[k-2];
+        const c = cost[st] + stickCost(h,hits[k].d,hits[k].t,last,h1===h,hits[k].vel,hits[k].dense);
+        const ns = h*3+h1;
+        if(c < nc[ns]){ nc[ns] = c; bp[ns] = st; bh[ns] = h; }
+      }
+    }
+    back[k] = {bp,bh}; cost = nc;
+  }
+  let bs = 0; for(let st=1;st<S;st++) if(cost[st] < cost[bs]) bs = st;
+  for(let k=N-1;k>=0;k--){ notes[hits[k].i].hand = back[k].bh[bs]; bs = back[k].bp[bs]; }
+  const lastIdx = [-1,-1];                                                              // для упреждения: следующий удар той же рукой
+  notes.forEach(n => { n.nextI = -1; });
+  hits.forEach(x => { const hd = notes[x.i].hand; if(lastIdx[hd] >= 0) notes[lastIdx[hd]].nextI = x.i; lastIdx[hd] = x.i; });
+}
+
+const LVAMP = [0.12,0.4,0.85,1.45];
+function strike(h,pt,now,arrive,lv,big,hold,nxt){
+  const f = evalHand(h,now);
+  const gap = h.seg ? arrive-h.seg.arrive : 600;
+  // замах зависит от силы слоя (ghost — почти касание, hard — высоко) и от паузы перед ударом
+  const amp = clamp((0.14 + LVAMP[lv]*0.62 + gap/1200 + (big && lv >= 2 ? 0.3 : 0))*(0.93+0.14*Math.random()), 0.14, 1.75);   // чуть разный размах каждый раз — как у человека
+  h.seg = {from:{x:f.x,y:f.y}, to:pt, start:now, arrive:Math.max(arrive,now+35), amp, h0:f.h, hold:hold||0, next:nxt||null, ft:(big && lv >= 2) ? 1 : 0};
+}
+const liveCym = [];
+function liveDense(d,t){ if(d.id !== 'snare') return false; return liveCym.filter(x => t-x < 0.4).length >= 3; }
+const liveLast = [null,null]; let liveLastHand = -1, liveFoot = 1, liveFootT = -9, liveHatT = -9;
+let TRIGC = 0;
+function trigger(note,vel,arrive,handIdx,footIdx,nextInfo){
+  const id = noteMap[note]; if(!id) return;
+  TRIGC++;
+  const d = BY[id], now = performance.now(), lv = layerOf(d,vel);
+  let foot = -1;
+  if(d.type === 'kick' || d.type === 'pedal'){
+    foot = footIdx;
+    if(foot !== 0 && foot !== 1){
+      if(d.type === 'pedal'){ foot = 0; liveHatT = arrive/1000; }
+      else { const t = arrive/1000; foot = (t-liveFootT < 0.18) ? 1-liveFoot : 1; if(foot === 0 && Math.abs(t-liveHatT) < 0.22) foot = 1; liveFoot = foot; liveFootT = t; }
+    }
+  } else {
+    let hi = handIdx;
+    if(hi !== 0 && hi !== 1){
+      const t = arrive/1000; let bc = 1e9; hi = 1;
+      for(let h=0;h<2;h++){ const c = stickCost(h,d,t,liveLast[h],liveLastHand===h,vel,liveDense(d,t)); if(c < bc){ bc = c; hi = h; } }
+    }
+    liveLast[hi] = {t:arrive/1000, d}; liveLastHand = hi;
+    if(d.id === 'hat' || d.id === 'ride'){ liveCym.push(arrive/1000); if(liveCym.length > 16) liveCym.shift(); }
+    const h = HAND[hi], mute = d.type === 'cymbal' && isMute(note);
+    let nxt = null;                                                          // что эта же рука будет играть дальше (известно, когда играем партию из файла)
+    if(nextInfo){ const nid = noteMap[nextInfo.note], nd = nid && BY[nid]; if(nd && nd.type !== 'kick' && nd.type !== 'pedal') nxt = {arrive:arrive+nextInfo.dt, pt:hitPoint(nd,h,nextInfo.note)}; }
+    strike(h,hitPoint(d,h,note),now,arrive,mute ? 1 : lv,!mute && d.type === 'cymbal' && d.id !== 'hat' && d.id !== 'ride',mute ? 330 : 0,nxt);
+  }
+  pending.push({t:arrive, id, vel, note, foot, lv, mute:d.type === 'cymbal' && isMute(note)});
+  if(soundOn && AC) playSound(d,note,vel,AC.currentTime + Math.max(0,(arrive-now)/1000));
+}
+
+function seek(t){
+  pos = clamp(t,0,dur); nextIdx = 0;
+  while(nextIdx < notes.length && notes[nextIdx].t < pos) nextIdx++;
+  pending = [];
+}
+function setPlaying(on){
+  playing = on; $('play').textContent = on ? '❚❚' : '▶';
+  if(on){ ensureAudio(); if(pos >= dur) seek(0); lastTs = performance.now(); }
+}
+function setSong(n,name){
+  notes = n; songBpm = n.bpm || 120; songName = name; dur = n.length ? n[n.length-1].t : 0;
+  setPlaying(false); seek(0); updateInfo();
+}
+function updateInfo(){
+  planSticking();
+  if(routeBuilt) buildRoute();
+  const un = {};
+  notes.forEach(n => { if(!noteMap[n.note]) un[n.note] = (un[n.note]||0)+1; });
+  const keys = Object.keys(un);
+  let s = `${songName}: ${notes.length} нот`;
+  if(keys.length) s += ` · не распознано нот: ${keys.length}`;
+  $('info').textContent = s;
+  renderUnmapped(un);
+}
+function renderUnmapped(un){
+  const keys = Object.keys(un).map(Number).sort((a,b) => a-b);
+  $('unmWrap').style.display = keys.length ? 'block' : 'none';
+  $('unmCount').textContent = keys.length;
+  const box = $('unm'); box.innerHTML = '';
+  keys.forEach(n => {
+    const row = document.createElement('div'); row.className = 'urow';
+    row.innerHTML = `<span class="un">${noteName(n)} <small>(${n}) ×${un[n]}</small></span>`;
+    const sel = document.createElement('select');
+    sel.innerHTML = '<option value="">выбрать барабан</option>' + DRUMS.map(d => `<option value="${d.id}">${d.label}</option>`).join('');
+    sel.onchange = () => {
+      if(!sel.value) return;
+      DRUMS.forEach(d => d.notes = d.notes.filter(x => x !== n));
+      BY[sel.value].notes.push(n);
+      rebuildMap(); buildMapUI(); updateInfo();
+    };
+    row.appendChild(sel); box.appendChild(row);
+  });
+}
+const fmt = s => { s = Math.max(0,s); return Math.floor(s/60) + ':' + String(Math.floor(s%60)).padStart(2,'0'); };
+
+/* ---------- Отрисовка ---------- */
+const cv = $('cv');
+let cx = cv.getContext('2d');
+// Статичные фоны рисуются один раз в offscreen-canvas и потом просто копируются (экономит кадр на телефоне)
+const BGC = {};
+function cachedBG(key,lw,lh,draw){
+  const pw = Math.round(lw*VS), ph = Math.round(lh*VS); let c = BGC[key];
+  if(!c || c.width !== pw || c.height !== ph){
+    c = BGC[key] = document.createElement('canvas'); c.width = pw; c.height = ph;
+    const g = c.getContext('2d'), main = cx; cx = g; g.setTransform(VS,0,0,VS,0,0); draw(); cx = main;
+  }
+  return c;
+}
+const RINGS = [0.45,0.68,0.88];
+let VS = 1;
+const TOP_CROP = 90;
+const PW = 420, PH = 240;                                   // вид от первого лица — широкий кадр, как в окне EZX
+function resize(){
+  const pv = viewMode === 'pov', lw = pv ? PW : W, lh = pv ? PH : H-TOP_CROP;
+  const w = $('stage').clientWidth - 12, dpr = Math.min(window.devicePixelRatio||1,2,1400/Math.max(w,1));   // ограничиваем размер буфера — главный расход — растеризация
+  cv.width = Math.round(w*dpr); cv.height = Math.round(w*lh/lw*dpr);
+  VS = cv.width/lw;
+}
+function fk(id,now){
+  const f = flash[id]; if(!f) return 0;
+  const a = now-f.t; if(a < 0) return 0;
+  return Math.max(0,1-a/260) * LVF[f.lv||0];
+}
+function fa(f,now){ const a = now-f.t; return a < 0 ? 0 : Math.max(0,1-a/200) * LVF[f.lv||0]; }
+function rrect(x,y,w,h,r){
+  cx.beginPath(); cx.moveTo(x+r,y); cx.arcTo(x+w,y,x+w,y+h,r); cx.arcTo(x+w,y+h,x,y+h,r);
+  cx.arcTo(x,y+h,x,y,r); cx.arcTo(x,y,x+w,y,r); cx.closePath();
+}
+function text(t,x,y,size,color){
+  cx.font = `700 ${size}px system-ui,-apple-system,sans-serif`;
+  cx.textAlign = 'center'; cx.textBaseline = 'middle';
+  cx.lineJoin = 'round'; cx.lineWidth = 3.5; cx.strokeStyle = 'rgba(8,10,16,.8)';
+  cx.strokeText(t,x,y); cx.fillStyle = color||'#fff'; cx.fillText(t,x,y);
+}
+function labelOf(d,y0){
+  const sz = ((d.r && d.r < 30) || d.label.length > 8) ? 9 : 11;
+  if(showNotes){
+    text(d.label,d.x,y0-5,sz); text(d.notes.join(' · '),d.x,y0+8,9,'#cdd3ea');
+  } else text(d.label,d.x,y0,sz);
+}
+function drawKick(d,k){
+  const x = d.x-d.w/2, y = d.y-d.h/2;
+  rrect(x,y,d.w,d.h,14); cx.fillStyle = '#171b29'; cx.fill();
+  cx.strokeStyle = '#4a5372'; cx.lineWidth = 3; cx.stroke();
+  cx.strokeStyle = 'rgba(255,255,255,.07)'; cx.lineWidth = 1;
+  [0.25,0.5,0.75].forEach(f => { cx.beginPath(); cx.moveTo(x+4,y+d.h*f); cx.lineTo(x+d.w-4,y+d.h*f); cx.stroke(); });
+  cx.globalAlpha = 0.18 + 0.82*k; cx.fillStyle = d.c; rrect(x+4,y+d.h-26,d.w-8,22,8); cx.fill(); cx.globalAlpha = 1;
+  labelOf(d,d.y-8);
+}
+function drawDrum(d,k,snare){
+  cx.beginPath(); cx.arc(d.x,d.y,d.r,0,6.2832); cx.fillStyle = '#171b29'; cx.fill();
+  cx.globalAlpha = 0.14 + 0.86*k; cx.fillStyle = d.c; cx.fill(); cx.globalAlpha = 1;
+  cx.strokeStyle = '#98a2c2'; cx.lineWidth = 4; cx.stroke();
+  cx.beginPath(); cx.arc(d.x,d.y,d.r-8,0,6.2832); cx.strokeStyle = d.c; cx.globalAlpha = 0.55; cx.lineWidth = 2; cx.stroke(); cx.globalAlpha = 1;
+  if(snare){
+    cx.strokeStyle = 'rgba(255,255,255,.12)'; cx.lineWidth = 1;
+    for(let i=-2;i<=2;i++){ cx.beginPath(); cx.moveTo(d.x-d.r+10,d.y+i*6+16); cx.lineTo(d.x+d.r-10,d.y+i*6+16); cx.stroke(); }
+  }
+  if(k > 0.02){
+    cx.beginPath(); cx.arc(d.x,d.y,d.r+(1-k)*16,0,6.2832);
+    cx.strokeStyle = d.c; cx.globalAlpha = k*0.8; cx.lineWidth = 3; cx.stroke(); cx.globalAlpha = 1;
+    const f = flash[d.id];
+    if(d.id === 'snare' && f && (isRim(f.note) || isSide(f.note))){   // обод вспыхивает на римшоте / side stick
+      cx.beginPath(); cx.arc(d.x,d.y,d.r,0,6.2832);
+      cx.strokeStyle = isRim(f.note) ? '#fff' : '#ffd166'; cx.globalAlpha = k; cx.lineWidth = isRim(f.note) ? 6 : 3; cx.stroke(); cx.globalAlpha = 1;
+    }
+  }
+  labelOf(d,d.y);
+}
+function drawCymbal(d,k,now){
+  let ox = 0;
+  const f = flash[d.id];
+  if(f && k > 0) ox = Math.sin((now-f.t)*0.05)*3*k;
+  const r = d.r*(1+0.04*k), x = d.x+ox, y = d.y;
+  if(d.id === 'hat' && hatOpenAmt > 0){
+    const o = 2+hatOpenAmt*7;
+    cx.beginPath(); cx.arc(x-o*0.6,y-o,r,0,6.2832); cx.strokeStyle = d.c; cx.globalAlpha = 0.5; cx.lineWidth = 2; cx.stroke(); cx.globalAlpha = 1;
+  }
+  const g = cx.createRadialGradient(x-r*0.25,y-r*0.3,r*0.1,x,y,r);
+  g.addColorStop(0,d.c); g.addColorStop(1,'#6b5a2a');
+  cx.beginPath(); cx.arc(x,y,r,0,6.2832); cx.fillStyle = g; cx.globalAlpha = 0.82; cx.fill(); cx.globalAlpha = 1;
+  cx.strokeStyle = 'rgba(255,255,255,.55)'; cx.lineWidth = 2; cx.stroke();
+  cx.strokeStyle = 'rgba(0,0,0,.22)'; cx.lineWidth = 1;
+  RINGS.forEach(q => { cx.beginPath(); cx.arc(x,y,r*q,0,6.2832); cx.stroke(); });
+  cx.beginPath(); cx.arc(x,y,r*0.2,0,6.2832); cx.fillStyle = 'rgba(255,255,255,.35)'; cx.fill();
+  if(k > 0.02){
+    cx.beginPath(); cx.arc(x,y,r,0,6.2832); cx.fillStyle = '#fff'; cx.globalAlpha = k*0.5; cx.fill(); cx.globalAlpha = 1;
+    cx.beginPath(); cx.arc(x,y,r+(1-k)*14,0,6.2832); cx.strokeStyle = d.c; cx.globalAlpha = k*0.8; cx.lineWidth = 3; cx.stroke(); cx.globalAlpha = 1;
+  }
+  const dd = {id:d.id, label:d.label, notes:d.notes, x, y, r:d.r};
+  const mt = muteAmt(d.id,now);
+  if(mt > 0.02){ cx.beginPath(); cx.arc(x,y,r,0,6.2832); cx.fillStyle = '#0a0b10'; cx.globalAlpha = mt*0.55; cx.fill(); cx.globalAlpha = 1; }
+  labelOf(dd,y);
+}
+function ik(sx,sy,hx,hy,l1,l2,side){
+  const dx = hx-sx, dy = hy-sy; let d = Math.hypot(dx,dy) || 1;
+  const tot = l1+l2;
+  if(d >= tot*0.999){ const k = d/(tot*0.999); l1 *= k; l2 *= k; }
+  const a = (l1*l1-l2*l2+d*d)/(2*d), hh = Math.sqrt(Math.max(0,l1*l1-a*a));
+  const ux = dx/d, uy = dy/d;
+  let px = -uy, py = ux;
+  if(px*side < 0){ px = -px; py = -py; }
+  return {x:sx+ux*a+px*hh, y:sy+uy*a+py*hh};
+}
+const SIL = '#252b40', SILE = '#6a7498';
+function limb(pts,wid){
+  cx.lineCap = 'round'; cx.lineJoin = 'round';
+  cx.beginPath(); cx.moveTo(pts[0].x,pts[0].y); for(let i=1;i<pts.length;i++) cx.lineTo(pts[i].x,pts[i].y);
+  cx.strokeStyle = SILE; cx.lineWidth = wid+4; cx.stroke();
+  cx.strokeStyle = SIL; cx.lineWidth = wid; cx.stroke();
+}
+function foot(x,y,sc){
+  sc = sc || 1;
+  rrect(x-12*sc,y-24*sc,24*sc,48*sc,10*sc); cx.fillStyle = '#2e3550'; cx.fill(); cx.strokeStyle = SILE; cx.lineWidth = 2; cx.stroke();
+}
+
+function topBG(){
+  const bg = cx.createRadialGradient(210,380,30,210,380,360);
+  bg.addColorStop(0,'#1a2033'); bg.addColorStop(1,'#0c0e14');
+  cx.fillStyle = bg; cx.fillRect(0,0,W,H);
+  cx.beginPath(); cx.ellipse(210,400,206,262,0,0,6.2832);
+  cx.fillStyle = 'rgba(255,255,255,.025)'; cx.fill(); cx.strokeStyle = 'rgba(255,255,255,.07)'; cx.lineWidth = 1; cx.stroke();
+}
+function drawTop(now){
+  NOW = now;
+  cx.setTransform(VS,0,0,VS,0,-TOP_CROP*VS);
+  cx.clearRect(0,0,W,H);
+  cx.drawImage(cachedBG('top',W,H,topBG),0,0,W,H);
+
+  // стул
+  cx.beginPath(); cx.arc(210,612,44,0,6.2832); cx.fillStyle = '#1c2133'; cx.fill(); cx.strokeStyle = '#3a4260'; cx.lineWidth = 2; cx.stroke();
+
+  const kk = fk('kick',now), kp = fk('hatpedal',now);
+  drawKick(BY.kick,kk);
+
+  // педали
+  [[226,412,30,112,'kR'],[164,412,30,112,'kL'],[100,508,36,66,'hat']].forEach(([bx0,by0,bw,bh,nm]) => {      // колодки вдавливаются при нажатии
+    const pr = pedalPress(pedalP(nm,now));
+    rrect(bx0,by0-pr*3,bw,bh,8); cx.fillStyle = '#242a3f'; cx.fill(); cx.strokeStyle = '#59628a'; cx.lineWidth = 2; cx.stroke();
+    cx.globalAlpha = pr*0.45; cx.fillStyle = '#ffd166'; cx.fill(); cx.globalAlpha = 1;
+    cx.beginPath(); cx.moveTo(bx0+4,by0+bh-12-pr*3); cx.lineTo(bx0+bw-4,by0+bh-12-pr*3); cx.strokeStyle = 'rgba(255,255,255,.2)'; cx.lineWidth = 1.5; cx.stroke();   // шарнир
+  });
+  text('HH PEDAL',74,590,9,'#cdd3ea');
+
+  // ноги
+  const hipR = {x:228,y:612}, hipL = {x:192,y:612};
+  const pR = pedalP('kR',now), pLf = lerp(pedalP('hat',now),pedalP('kL',now),lfoot.mix);
+  const fR = {x:241, y:522-pedalPress(pR)*15+pedalLift(pR)*5};
+  const fL = {x:lerp(118,179,lfoot.mix), y:lerp(542,522,lfoot.mix)-pedalPress(pLf)*14+pedalLift(pLf)*4-lfoot.lift*10};
+  limb([hipR, ik(hipR.x,hipR.y,fR.x,fR.y,74,74,1), fR],28);
+  limb([hipL, ik(hipL.x,hipL.y,fL.x,fL.y,74,74,-1), fL],28);
+  foot(fR.x,fR.y); foot(fL.x,fL.y,1+lfoot.lift*0.22);
+
+  // барабаны, потом тарелки
+  ['tom1','tom2','floor1','floor2'].forEach(id => drawDrum(BY[id],fk(id,now),false));
+  drawDrum(BY.snare,fk('snare',now),true);
+  ['crash1','splash','crash2','crashride','ride','china2','hat'].forEach(id => drawCymbal(BY[id],fk(id,now),now));
+
+  // руки
+  const tL = evalHand(hands.L,now), tR = evalHand(hands.R,now);
+  const en = ENERGY;                                                                  // «энергия» ударов: чем сильнее, тем азартнее корпус
+  // базовый наклон + «подъезд»: если кисть не достаёт цели, корпус придвигается к ней (руки не растягиваются)
+  const baseX = clamp(((tL.x+tR.x)/2-210)*0.06,-18,18), baseY = clamp(((tL.y+tR.y)/2-450)*0.1,-30,6);
+  let needX = 0, needY = 0;
+  [[hands.L,tL],[hands.R,tR]].forEach(([h,t]) => {
+    const shx = 210+baseX+h.side*58, shy = 592+baseY-3;
+    const vx = t.x-shx, vy = t.y-shy, vl = Math.hypot(vx,vy)||1, gg = stickGeo(t.h);
+    const hx = t.x-vx/vl*gg.back, hy = t.y-vy/vl*gg.back, ddx = hx-shx, ddy = hy-shy, dd = Math.hypot(ddx,ddy);
+    if(dd > 220){ const k = (dd-220)/dd; if(Math.abs(ddx*k) > Math.abs(needX)) needX = ddx*k; if(Math.abs(ddy*k) > Math.abs(needY)) needY = ddy*k; }
+  });
+  const tx = clamp(baseX+needX,-80,80), ty = clamp(baseY+needY-en*7,-100,10);
+  lean.x = lerp(lean.x,tx,kS(12)); lean.y = lerp(lean.y,ty,kS(12));
+  lean.a = lerp(lean.a||0, clamp(((tL.x+tR.x)/2-210)/900,-0.22,0.22), kS(7));   // корпус поворачивается к рабочей стороне
+  const ca = Math.cos(lean.a), sa = Math.sin(lean.a);
+  bobS += ((kk*5 + fk('snare',now)*3.5 + en*3 + PULSE*1.4)-bobS)*kS(22);
+  const bob = bobS + Math.sin(now/950)*1.1;   // удар + дыхание
+  look.x += (clamp((lastHitX-210)*0.05,-6,6)-look.x)*kS(6);
+  const bx = 210+lean.x, by = 592+lean.y+bob;
+
+  // корпус и голова
+  cx.beginPath(); cx.ellipse(bx,by+16,56,40,lean.a,0,6.2832); cx.fillStyle = SIL; cx.fill(); cx.strokeStyle = SILE; cx.lineWidth = 2; cx.stroke();
+  cx.beginPath(); cx.ellipse(bx,by,68,25,lean.a,0,6.2832); cx.fillStyle = SIL; cx.fill(); cx.stroke();
+
+  // руки со палочками
+  [[hands.L,tL],[hands.R,tR]].forEach(([h,t]) => {
+    const sh = {x:bx+h.side*58*ca, y:by-3+h.side*58*sa};
+    let vx = t.x-sh.x, vy = t.y-sh.y; const vl = Math.hypot(vx,vy)||1; vx /= vl; vy /= vl;
+    const g = stickGeo(t.h), back = g.back;
+    const hand = t.grab ? {x:t.x-vx*6, y:t.y-vy*6} : {x:t.x-vx*back, y:t.y-vy*back};   // хват на 1/3 палочки; при глушении кисть лежит на ободе
+    h.reach = Math.hypot(hand.x-sh.x,hand.y-sh.y);
+    const el = ik(sh.x,sh.y,hand.x,hand.y,120,120,h.side);
+    const mx = (sh.x+hand.x)/2, my = (sh.y+hand.y)/2, ox = el.x-mx, oy = el.y-my, ol = Math.hypot(ox,oy)||1, cap = Math.min(ol,34)/ol;
+    const ctl = {x:mx+ox*cap*0.8, y:my+oy*cap*0.8};   // локоть слегка наружу, без острых углов
+    const arm = bez(sh,ctl,hand,14);                                   // рука — плавная дуга, а не два прямых куска с острым локтем
+    tube(arm.slice(0,10),22,15,SIL,SILE);                              // рукав
+    tube(arm.slice(9),14,10,SKIN.base,SKIN.line);                      // голое предплечье у кисти
+    tube(arm.slice(8,10),16,16,'#272a36',SILE);                        // манжета
+    cx.lineCap = 'round'; cx.beginPath(); cx.moveTo(hand.x-vx*STICK.butt*Math.cos(g.ang),hand.y-vy*STICK.butt*Math.cos(g.ang)); cx.lineTo(t.x,t.y);
+    cx.strokeStyle = '#f2e4be'; cx.lineWidth = 4.5; cx.stroke();
+    cx.beginPath(); cx.arc(t.x,t.y,3+t.h*2,0,6.2832); cx.fillStyle = '#fff6dc'; cx.fill();
+    drawHand(hand.x,hand.y,t.grab ? Math.atan2(vy,vx) : Math.atan2(t.y-hand.y,t.x-hand.x),t.grab ? 0.55 : 0.46,h.side);
+  });
+
+  // голова с наушниками
+  const hx = bx+lean.x*0.2+look.x, hy = by+2+bob*0.9;
+  cx.beginPath(); cx.arc(hx,hy,21,0,6.2832); cx.fillStyle = '#2d3450'; cx.fill(); cx.strokeStyle = SILE; cx.lineWidth = 2; cx.stroke();
+  cx.fillStyle = '#ff4f79';
+  cx.beginPath(); cx.ellipse(hx-22,hy,6,10,0,0,6.2832); cx.fill();
+  cx.beginPath(); cx.ellipse(hx+22,hy,6,10,0,0,6.2832); cx.fill();
+  cx.beginPath(); cx.arc(hx,hy,22,Math.PI*1.05,Math.PI*1.95); cx.strokeStyle = '#ff4f79'; cx.lineWidth = 3; cx.stroke();
+}
+
+/* ---------- Сцена 2: вид от первого лица — раскладка снята со скриншота окна Modern Metal EZX ----------
+   Координаты берутся прямо из картинки (пиксели скриншота → единицы кадра 420×240). */
+let viewMode = 'top';
+const PSC = 0.244;
+const cvt = (ix,iy) => ({x:(ix-500)*PSC, y:(iy-170)*PSC});
+const pvE = (ix,iy,rx,ry,ex) => { const p = cvt(ix,iy); return Object.assign({x:p.x,y:p.y,rx:rx*PSC,ry:ry*PSC},ex||{}); };
+const PV = {
+  crash1:   pvE(882,345,148,60,{rot:-0.06}),
+  splash:   pvE(1485,288,92,36,{rot:0.03}),
+  crash2:   pvE(1710,322,130,52,{rot:0.04}),
+  hat:      pvE(955,565,110,42,{rot:0}),
+  crashride:pvE(1757,488,160,66,{rot:0.03}),
+  ride:     pvE(1925,575,185,78,{rot:0.04}),
+  china2:   pvE(1995,712,165,66,{rot:0.03}),
+  tom1:     pvE(1218,452,78,42,{sh:130*PSC}),
+  tom2:     pvE(1442,468,98,50,{sh:125*PSC}),
+  kick:     pvE(1312,787,148,148),
+  snare:    pvE(1142,625,133,56,{sh:100*PSC}),
+  floor1:   pvE(1595,690,145,80,{sh:300*PSC}),
+  floor2:   pvE(1750,868,160,92,{sh:270*PSC})
+};
+const PV_ORDER = ['crash1','splash','crash2','hat','crashride','ride','china2','tom1','tom2','kick','snare','floor1','floor2'];
+const PV_PED = {hat:cvt(1010,1000), kL:{x:183,y:204}, kR:{x:213,y:200}};
+const pov = {yaw:0};
+let bobY = 0;
+const pvShift = y => 0;                                      // установка неподвижна: двигается только барабанщик
+// верхний вид → экранная точка POV (взвешенно по ближайшим барабанам, смещения от центра сохраняются)
+function povMap(x,y){
+  let sw = 0, sx = 0, sy = 0;
+  for(const d of DRUMS){
+    const g = PV[d.id]; if(!g || d.type === 'kick' || d.type === 'pedal') continue;
+    const u = Math.hypot(d.x-x,d.y-y)/d.r, w = 1/(u*u*u*u+0.01);            // близко к барабану — только он, между барабанами — плавно
+    sw += w; sx += w*(g.x+(x-d.x)*g.rx/d.r); sy += w*(g.y+(y-d.y)*g.ry/d.r);
+  }
+  return {x:sx/sw, y:sy/sw};
+}
+function ell(x,y,rx,ry,rot){ cx.beginPath(); cx.ellipse(x,y,rx,ry,rot||0,0,6.2832); }
+function pvLabel(d,x,y,sz,now){
+  text(d.label,x,y,sz);
+}
+function pvBackground(){
+  const wall = cx.createLinearGradient(0,0,0,PH*0.5); wall.addColorStop(0,'#0b0908'); wall.addColorStop(1,'#1b140e');
+  cx.fillStyle = wall; cx.fillRect(0,0,PW,PH*0.5);
+  [[340,0,470,480],[1620,0,380,470]].forEach(([ix,iy,iw,ih]) => {                 // колонки на заднем плане
+    const p = cvt(ix,iy); cx.fillStyle = '#0e0c0b'; cx.fillRect(p.x,Math.max(0,p.y),iw*PSC,ih*PSC); cx.strokeStyle = '#6b4a1f'; cx.lineWidth = 1.5; cx.strokeRect(p.x,Math.max(0,p.y),iw*PSC,ih*PSC);
+  });
+  const fl = cx.createLinearGradient(0,PH*0.36,0,PH); fl.addColorStop(0,'#4a3220'); fl.addColorStop(1,'#271a10');
+  cx.fillStyle = fl; cx.fillRect(0,PH*0.36,PW,PH);
+  cx.strokeStyle = 'rgba(0,0,0,.28)'; cx.lineWidth = 1;
+  for(let i=-8;i<=8;i++){ cx.beginPath(); cx.moveTo(PW/2+i*14,PH*0.36); cx.lineTo(PW/2+i*46,PH); cx.stroke(); }
+  const q = [cvt(690,655),cvt(2000,740),cvt(2240,1150),cvt(470,1150)];                // ковёр
+  cx.beginPath(); cx.moveTo(q[0].x,q[0].y); q.slice(1).forEach(p => cx.lineTo(p.x,p.y)); cx.closePath(); cx.fillStyle = '#26262b'; cx.fill();
+  const bn = cvt(1885,0); cx.fillStyle = '#23160c'; cx.fillRect(bn.x,0,320*PSC,520*PSC);                // баннер
+}
+function pvCymbal(d,g,sx,k,now){
+  const f = flash[d.id], wob = (f && k > 0) ? Math.sin((now-f.t)*0.05)*2*k : 0;
+  const x = g.x+sx+wob, y = g.y+bobY, rx = g.rx*(1+0.04*k), ry = g.ry*(1+0.04*k);
+  let yTop = y;
+  if(d.id === 'hat'){
+    ell(x,y+4,rx,ry,g.rot); cx.fillStyle = '#5b5126'; cx.fill(); cx.strokeStyle = 'rgba(255,255,255,.3)'; cx.lineWidth = 1; cx.stroke();
+    yTop = y-hatOpenAmt*5+pedalPress(pedalP('hat',now))*3;
+  }
+  if(g.mesh){                                                                   // перфорированная «сетка» (как в окне EZX)
+    ell(x,yTop,rx,ry,g.rot); cx.fillStyle = 'rgba(150,160,185,.42)'; cx.fill(); cx.strokeStyle = 'rgba(210,220,240,.6)'; cx.lineWidth = 1.5; cx.stroke();
+    cx.save(); ell(x,yTop,rx,ry,g.rot); cx.clip(); cx.strokeStyle = 'rgba(20,24,34,.35)'; cx.lineWidth = 0.8;
+    for(let u=-rx;u<=rx;u+=5){ cx.beginPath(); cx.moveTo(x+u,yTop-ry); cx.lineTo(x+u+ry*0.6,yTop+ry); cx.stroke(); cx.beginPath(); cx.moveTo(x+u,yTop+ry); cx.lineTo(x+u+ry*0.6,yTop-ry); cx.stroke(); }
+    cx.restore();
+  } else {
+    const gr = cx.createRadialGradient(x-rx*0.2,yTop-ry*0.3,1,x,yTop,rx);
+    gr.addColorStop(0,'#e3c27c'); gr.addColorStop(0.55,d.c); gr.addColorStop(1,'#6b5a2a');
+    ell(x,yTop,rx,ry,g.rot); cx.fillStyle = gr; cx.globalAlpha = 0.95; cx.fill(); cx.globalAlpha = 1;
+    cx.strokeStyle = 'rgba(255,255,255,.55)'; cx.lineWidth = 1.3; cx.stroke();
+    RINGS.forEach(q => { ell(x,yTop,rx*q,ry*q,g.rot); cx.strokeStyle = 'rgba(0,0,0,.2)'; cx.lineWidth = 0.8; cx.stroke(); });
+    ell(x,yTop-ry*0.1,rx*0.18,ry*0.2,g.rot); cx.fillStyle = 'rgba(255,255,255,.4)'; cx.fill();
+  }
+  if(k > 0.02){
+    ell(x,yTop,rx,ry,g.rot); cx.fillStyle = '#fff'; cx.globalAlpha = k*0.5; cx.fill(); cx.globalAlpha = 1;
+    ell(x,yTop,rx+(1-k)*8,ry+(1-k)*5,g.rot); cx.strokeStyle = d.c; cx.globalAlpha = k*0.8; cx.lineWidth = 1.8; cx.stroke(); cx.globalAlpha = 1;
+  }
+  const mt = muteAmt(d.id,now);
+  if(mt > 0.02){ ell(x,yTop,rx,ry,g.rot); cx.fillStyle = '#0a0b10'; cx.globalAlpha = mt*0.55; cx.fill(); cx.globalAlpha = 1; }
+  pvLabel(d,x,yTop+(d.id === 'crashride' ? -ry*0.5 : ry*0.12),clamp(rx*0.27,7,11),now);
+}
+function pvDrum(d,g,sx,k,now){
+  const x = g.x+sx, y = g.y+bobY, rx = g.rx, ry = g.ry, sh = g.sh, snare = d.id === 'snare';
+  cx.beginPath(); cx.moveTo(x-rx,y); cx.lineTo(x-rx,y+sh); cx.ellipse(x,y+sh,rx,ry,0,Math.PI,0,true); cx.lineTo(x+rx,y); cx.closePath();
+  const gr = cx.createLinearGradient(x-rx,0,x+rx,0);
+  if(snare){ gr.addColorStop(0,'#555a63'); gr.addColorStop(0.3,'#cfd3d9'); gr.addColorStop(0.65,'#8d929b'); gr.addColorStop(1,'#4a4e56'); }
+  else { gr.addColorStop(0,'#0b0c10'); gr.addColorStop(0.3,'#2a2e3a'); gr.addColorStop(0.7,'#14161d'); gr.addColorStop(1,'#08090c'); }
+  cx.fillStyle = gr; cx.fill(); cx.strokeStyle = snare ? '#7d828c' : '#3a3f4e'; cx.lineWidth = 1; cx.stroke();
+  const hg = cx.createRadialGradient(x-rx*0.2,y-ry*0.25,1,x,y,rx);
+  if(snare){ hg.addColorStop(0,'#f1eee8'); hg.addColorStop(1,'#cbc6bb'); } else { hg.addColorStop(0,'#d19a62'); hg.addColorStop(1,'#8b5a30'); }
+  ell(x,y,rx,ry); cx.fillStyle = hg; cx.fill();
+  cx.globalAlpha = 0.12+0.7*k; cx.fillStyle = d.c; cx.fill(); cx.globalAlpha = 1;
+  cx.strokeStyle = '#a9aeb8'; cx.lineWidth = 2.2; cx.stroke();
+  ell(x,y,rx*0.55,ry*0.5); cx.strokeStyle = 'rgba(0,0,0,.12)'; cx.lineWidth = 1; cx.stroke();
+  if(snare){
+    const f = flash[d.id];
+    if(f && k > 0.02 && (isRim(f.note) || isSide(f.note))){ ell(x,y,rx,ry); cx.strokeStyle = isRim(f.note) ? '#fff' : '#ffd166'; cx.globalAlpha = k; cx.lineWidth = 3.5; cx.stroke(); cx.globalAlpha = 1; }
+  }
+  if(k > 0.02){ ell(x,y,rx+(1-k)*9,ry+(1-k)*5); cx.strokeStyle = d.c; cx.globalAlpha = k*0.8; cx.lineWidth = 2; cx.stroke(); cx.globalAlpha = 1; }
+  pvLabel(d,x,y,clamp(rx*0.17,8,11),now);
+}
+function pvKick(d,g,sx,k,now){
+  const x = g.x+sx, y = g.y+bobY;
+  ell(x,y,g.rx,g.ry); cx.fillStyle = '#101218'; cx.fill();
+  cx.globalAlpha = 0.1+0.8*k; cx.fillStyle = d.c; cx.fill(); cx.globalAlpha = 1;
+  cx.strokeStyle = '#1b86b8'; cx.lineWidth = 3.2; cx.stroke();                 // синий обод, как в окне EZX
+  ell(x,y,g.rx*0.97,g.ry*0.97); cx.strokeStyle = '#2b2f3a'; cx.lineWidth = 1; cx.stroke();
+  const gl = cx.createRadialGradient(x-g.rx*0.25,y-g.ry*0.3,2,x,y,g.rx); gl.addColorStop(0,'rgba(255,255,255,.07)'); gl.addColorStop(1,'rgba(255,255,255,0)');
+  ell(x,y,g.rx,g.ry); cx.fillStyle = gl; cx.fill();
+  ell(x+g.rx*0.16,y-g.ry*0.02,5,6); cx.fillStyle = '#9aa0ad'; cx.fill();         // логотип/пятно под колотушку
+  pvLabel({id:d.id,label:d.label},x+g.rx*0.42,y-g.ry*0.38,10,now);
+}
+function tube(pts,w0,w1,fill,edge){
+  const n = pts.length, L = [], R = [];
+  for(let i=0;i<n;i++){
+    const a = pts[Math.max(0,i-1)], b = pts[Math.min(n-1,i+1)]; const dx = b.x-a.x, dy = b.y-a.y, l = Math.hypot(dx,dy)||1, w = lerp(w0,w1,i/(n-1))/2;
+    L.push({x:pts[i].x-dy/l*w, y:pts[i].y+dx/l*w}); R.push({x:pts[i].x+dy/l*w, y:pts[i].y-dx/l*w});
+  }
+  cx.beginPath(); cx.moveTo(L[0].x,L[0].y); L.forEach(q => cx.lineTo(q.x,q.y)); for(let i=n-1;i>=0;i--) cx.lineTo(R[i].x,R[i].y); cx.closePath();
+  cx.fillStyle = fill; cx.fill(); cx.strokeStyle = edge; cx.lineWidth = 1.4; cx.stroke();
+}
+function bez(P0,P1,P2,n){ const o = []; for(let i=0;i<=n;i++){ const t = i/n, u = 1-t; o.push({x:u*u*P0.x+2*u*t*P1.x+t*t*P2.x, y:u*u*P0.y+2*u*t*P1.y+t*t*P2.y}); } return o; }
+function pvBeaters(now){                                                         // педаль → колотушка → пластик бочки
+  const K = PV.kick;
+  [['kL',0],['kR',1]].forEach(([nm,i]) => {
+    const pd = PV_PED[nm], x = pd.x;
+    const pb = clamp(pedalP(nm,now)/0.85,0,1);                                   // 0 = касается пластика, 1 = отведена к барабанщику
+    const strike = K.y+K.ry*0.46, back = strike+15, hinge = pd.y-20;
+    const ty = lerp(strike,back,pb), r = lerp(3.3,5.6,pb);
+    cx.lineCap = 'round'; cx.beginPath(); cx.moveTo(x,hinge); cx.lineTo(x,ty); cx.strokeStyle = '#aab3cf'; cx.lineWidth = 2.2; cx.stroke();
+    cx.beginPath(); cx.arc(x,ty,r,0,6.2832); cx.fillStyle = '#e8e1cc'; cx.fill(); cx.strokeStyle = '#8f8a79'; cx.lineWidth = 1; cx.stroke();
+    cx.beginPath(); cx.arc(x-r*0.3,ty-r*0.3,r*0.35,0,6.2832); cx.fillStyle = 'rgba(255,255,255,.55)'; cx.fill();
+  });
+}
+function pvLegs(now){
+  const bd = [[PV_PED.hat,22,40,-0.25,'hat'],[PV_PED.kL,19,44,0.0,'kL'],[PV_PED.kR,19,44,0.1,'kR']];
+  bd.forEach(([b,w,h,rot,nm]) => {
+    const pp = pedalP(nm,now), pr = pedalPress(pp), lf = pedalLift(pp);
+    cx.save(); cx.translate(b.x,b.y+pr*1.6); cx.rotate(rot+(pr-lf*0.6)*0.1*(nm === 'hat' ? -1 : 1));
+    rrect(-w/2,-h/2,w,h,4); cx.fillStyle = '#2b3040'; cx.fill(); cx.strokeStyle = '#8b94b3'; cx.lineWidth = 1.2; cx.stroke();
+    cx.globalAlpha = pr*0.5; cx.fillStyle = '#ffd166'; cx.fill(); cx.globalAlpha = 1;
+    cx.beginPath(); cx.moveTo(-w/2+2,h/2-8); cx.lineTo(w/2-2,h/2-8); cx.strokeStyle = 'rgba(255,255,255,.25)'; cx.lineWidth = 1; cx.stroke();
+    cx.restore();
+  });
+  const mix = lfoot.mix, pL = lerp(pedalP('hat',now),pedalP('kL',now),mix), pRr = pedalP('kR',now);
+  const feet = [
+    {x:lerp(PV_PED.hat.x,PV_PED.kL.x,mix), y:lerp(PV_PED.hat.y,PV_PED.kL.y,mix)-pedalPress(pL)*6+pedalLift(pL)*2.5-lfoot.lift*9, side:-1, big:1+lfoot.lift*0.18},
+    {x:PV_PED.kR.x, y:PV_PED.kR.y-pedalPress(pRr)*7+pedalLift(pRr)*3, side:1, big:1}
+  ];
+  feet.forEach(f => {
+    const y = f.y;
+    tube([{x:f.x,y:y+2},{x:f.x+f.side*18,y:y+36},{x:f.x+f.side*32,y:y+90}],15,30,'#1c2236','#454e6c');   // голень и бедро уходят за край кадра
+    cx.save(); cx.translate(f.x,y); cx.scale(f.big,f.big); cx.translate(-f.x,-y);
+    rrect(f.x-9,y-17,18,32,7); cx.fillStyle = '#1a1d28'; cx.fill(); cx.strokeStyle = '#7b84a6'; cx.lineWidth = 1.2; cx.stroke();
+    rrect(f.x-9,y+8,18,7,3); cx.fillStyle = '#d8dbe6'; cx.fill();                       // подошва
+    cx.beginPath(); cx.moveTo(f.x-6,y-9); cx.lineTo(f.x+6,y-9); cx.moveTo(f.x-6,y-4); cx.lineTo(f.x+6,y-4); cx.strokeStyle = 'rgba(255,255,255,.35)'; cx.lineWidth = 1; cx.stroke();   // шнуровка
+    cx.restore();
+  });
+}
+const SKIN = {base:'#d9a57c', dark:'#a86d49', light:'#efc7a2', line:'rgba(72,36,18,.65)'};
+// Кисть-«манекен»: гладкая форма без пальцев + одна выпуклость большого пальца. Локальные оси: +x вдоль палочки.
+function drawHand(x,y,ang,sc,side){
+  cx.save(); cx.translate(x,y); cx.rotate(ang); cx.scale(sc,sc);
+  const ts = (side*Math.sin(ang) >= 0 ? 1 : -1);
+  cx.translate(0,-ts*4.5);                                   // палочка выходит со стороны большого пальца
+  cx.fillStyle = 'rgba(0,0,0,.25)'; cx.beginPath(); cx.ellipse(-4,5,23,14,0,0,6.2832); cx.fill();   // тень
+  cx.beginPath(); cx.moveTo(-26,-7);
+  cx.quadraticCurveTo(-12,-14.5,2,-14.5); cx.quadraticCurveTo(15,-14,17,-4); cx.quadraticCurveTo(18.5,0,17,4);
+  cx.quadraticCurveTo(15,14,2,14.5); cx.quadraticCurveTo(-12,14.5,-26,7); cx.closePath();
+  const g = cx.createLinearGradient(0,-14,0,14); g.addColorStop(0,SKIN.dark); g.addColorStop(0.3,SKIN.light); g.addColorStop(0.72,SKIN.base); g.addColorStop(1,SKIN.dark);
+  cx.fillStyle = g; cx.fill(); cx.strokeStyle = SKIN.line; cx.lineWidth = 1.3; cx.stroke();
+  cx.beginPath(); cx.ellipse(-1,ts*12.8,13,5,ts*-0.08,0,6.2832); cx.fillStyle = SKIN.base; cx.fill(); cx.strokeStyle = SKIN.line; cx.lineWidth = 1.1; cx.stroke();   // большой палец
+  cx.beginPath(); cx.ellipse(-5,-ts*3.5,11,3.8,0,0,6.2832); cx.fillStyle = 'rgba(255,232,208,.28)'; cx.fill();                                                       // блик
+  cx.restore();
+}
+const POVREST = {L:{x:62,y:178}, R:{x:304,y:178}};
+function pvHand(h,t,now,ox,bm0){
+  const bm = bm0 || povMap(t.x,t.y), rp = h.side < 0 ? POVREST.L : POVREST.R;
+  const b = t.rw ? {x:lerp(bm.x,rp.x,t.rw), y:lerp(bm.y,rp.y,t.rw)} : bm, hs = 0.95+0.2*clamp(b.y/200,0,1);
+  const base = {x:b.x+pvShift(b.y), y:b.y+bobY}, lift = t.h*26*hs;
+  const tip = {x:base.x, y:base.y-lift};
+  cx.beginPath(); cx.ellipse(base.x+1,base.y+2,3.5+lift*0.2,1.6,0,0,6.2832); cx.fillStyle = 'rgba(0,0,0,'+(0.16+0.14*clamp(1-t.h,0,1))+')'; cx.fill();   // тень наконечника на барабане
+  const anchor = h.side < 0 ? {x:120,y:305} : {x:300,y:305};
+  const len = (74+0.1*tip.y)*hs, hsc = 0.74*hs;
+  let dx = (anchor.x-tip.x)*0.5, dy = anchor.y-tip.y; let dl = Math.hypot(dx,dy)||1; dx /= dl; dy /= dl;
+  dx += (ox||0)/(len*0.66); dl = Math.hypot(dx,dy)||1; dx /= dl; dy /= dl;        // руки расходятся, а наконечники остаются на барабанах
+  const grab = !!t.grab;
+  const grip = grab ? {x:tip.x+dx*4, y:tip.y+dy*4} : {x:tip.x+dx*len*0.66, y:tip.y+dy*len*0.66}, butt = grab ? {x:tip.x+dx*len*0.5, y:tip.y+dy*len*0.5} : {x:tip.x+dx*len, y:tip.y+dy*len};
+  const wrist = {x:grip.x+dx*24*hsc, y:grip.y+dy*24*hsc};
+  // предплечье: голая кожа до рукава, дальше — рукав; локоть наружу под ~20°
+  const th = -h.side*0.35, c = Math.cos(th), sn = Math.sin(th), ax = dx*c-dy*sn, ay = dx*sn+dy*c;
+  const P = k => ({x:wrist.x+ax*k*hs, y:wrist.y+ay*k*hs});
+  tube([P(0),P(20),P(40),P(58)],12*hs,17*hs,SKIN.base,SKIN.line);
+  cx.beginPath(); cx.moveTo(P(2).x,P(2).y); cx.lineTo(P(56).x,P(56).y); cx.strokeStyle = 'rgba(255,226,196,.35)'; cx.lineWidth = 2.2*hs; cx.lineCap = 'round'; cx.stroke();
+  tube([P(-2),P(3)],13.5*hs,13.5*hs,'#15161c','#34394f');                                   // напульсник
+  tube([P(58),P(90),P(130),P(175)],20*hs,30*hs,'#1b1d26','#3a4060');                         // рукав
+  tube([P(56),P(60)],21*hs,21*hs,'#272a36','#3a4060');                                      // манжета рукава
+  // палочка (конус, дерево) и наконечник
+  const ang = grab ? Math.atan2(-dy,-dx) : Math.atan2(tip.y-grip.y,tip.x-grip.x), nx = -Math.sin(ang), ny = Math.cos(ang), wb = 2.3*hs, wt = 1.25*hs;
+  cx.beginPath(); cx.moveTo(butt.x+nx*wb,butt.y+ny*wb); cx.lineTo(tip.x+nx*wt,tip.y+ny*wt); cx.lineTo(tip.x-nx*wt,tip.y-ny*wt); cx.lineTo(butt.x-nx*wb,butt.y-ny*wb); cx.closePath();
+  const sg = cx.createLinearGradient(butt.x,butt.y,tip.x,tip.y); sg.addColorStop(0,'#c9b27c'); sg.addColorStop(1,'#e8d7aa');
+  cx.fillStyle = sg; cx.fill(); cx.strokeStyle = 'rgba(70,45,15,.6)'; cx.lineWidth = 0.8; cx.stroke();
+  cx.beginPath(); cx.moveTo(butt.x+nx*wb*0.3,butt.y+ny*wb*0.3); cx.lineTo(tip.x+nx*wt*0.3,tip.y+ny*wt*0.3); cx.strokeStyle = 'rgba(255,248,225,.6)'; cx.lineWidth = 0.9; cx.stroke();
+  cx.beginPath(); cx.ellipse(tip.x,tip.y,2.2*hs,1.8*hs,ang,0,6.2832); cx.fillStyle = '#f3e7c4'; cx.fill(); cx.strokeStyle = 'rgba(70,45,15,.6)'; cx.lineWidth = 0.7; cx.stroke();
+  drawHand(grip.x,grip.y,ang,grab ? hsc*1.12 : hsc,h.side);
+}
+function drawPOV(now){
+  NOW = now;
+  cx.setTransform(VS,0,0,VS,0,0); cx.clearRect(0,0,PW,PH);
+  cx.drawImage(cachedBG('pov',PW,PH,pvBackground),0,0,PW,PH);
+
+  const tL = evalHand(hands.L,now), tR = evalHand(hands.R,now), mid = (tL.x+tR.x)/2;
+  pov.yaw = lerp(pov.yaw, clamp((mid-210)/450,-0.35,0.35), kS(5));            // голова поворачивается за руками
+  bobP += ((fk('kick',now)*5 + fk('snare',now)*3.5 + ENERGY*3)-bobP)*kS(20);
+  bobY = 0;
+
+  PV_ORDER.forEach(id => {                                                      // стойки: от тарелки до пола, с треногой
+    const g = PV[id], d = BY[id]; if(!d || d.type !== 'cymbal') return;
+    const x = g.x+pvShift(g.y), top = g.y+bobY+g.ry*0.2;
+    if(id === 'hat'){ cx.beginPath(); cx.moveTo(x,top+4); cx.lineTo(PV_PED.hat.x,PV_PED.hat.y-18); cx.strokeStyle = '#3a3f4c'; cx.lineWidth = 2.2; cx.stroke(); return; }
+    const baseY = Math.min(238,Math.max(g.y+g.ry+26,100+g.y*0.55));
+    cx.lineCap = 'round';
+    cx.beginPath(); cx.moveTo(x,top); cx.lineTo(x,baseY); cx.strokeStyle = '#3a3f4c'; cx.lineWidth = 2.2; cx.stroke();
+    cx.beginPath(); cx.moveTo(x+0.7,top); cx.lineTo(x+0.7,baseY); cx.strokeStyle = 'rgba(190,200,225,.25)'; cx.lineWidth = 0.8; cx.stroke();
+    cx.strokeStyle = '#3a3f4c'; cx.lineWidth = 1.8;
+    [[-16,5],[16,5],[0,10]].forEach(([dx,dy]) => { cx.beginPath(); cx.moveTo(x,baseY-3); cx.lineTo(x+dx,baseY+dy); cx.stroke(); cx.beginPath(); cx.arc(x+dx,baseY+dy,1.6,0,6.2832); cx.fillStyle = '#15171d'; cx.fill(); });
+  });
+  PV_ORDER.forEach(id => {
+    const g = PV[id], d = BY[id]; if(!d) return;
+    const k = fk(id,now), sx = pvShift(g.y);
+    if(d.type === 'kick') pvKick(d,g,sx,k,now);
+    else if(d.type === 'cymbal') pvCymbal(d,g,sx,k,now);
+    else pvDrum(d,g,sx,k,now);
+  });
+  pvLegs(now);
+  pvBeaters(now);                                                              // колотушки поверх педалей: видно, как педаль бьёт по пластику
+  const bL = povMap(tL.x,tL.y), bR = povMap(tR.x,tR.y);                      // руки не должны слипаться: если рядом — раздвигаем
+  const gapX = (bR.x+pvShift(bR.y))-(bL.x+pvShift(bL.y)), near = Math.abs(bR.y-bL.y) < 50 && gapX < 46;
+  const want = near ? (46-gapX)/2 : 0;
+  pov.sep = lerp(pov.sep||0,want,kS(9));
+  pvHand(hands.L,tL,now,-pov.sep,bL);
+  pvHand(hands.R,tR,now,pov.sep,bR);
+
+  const vg = cx.createRadialGradient(PW/2,PH*0.5,PH*0.35,PW/2,PH*0.5,PW*0.62);
+  vg.addColorStop(0,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(0,0,0,.4)');
+  cx.fillStyle = vg; cx.fillRect(0,0,PW,PH);
+}
+function draw(now){
+  DT = clamp((now-lastDrawT)/1000,0.001,0.05); lastDrawT = now;
+  updateLeftFoot(now);
+  ENERGY = 0; for(const d of DRUMS) ENERGY = Math.max(ENERGY,fk(d.id,now));
+  if(viewMode === 'pov') drawPOV(now); else drawTop(now);
+}
+
+
+/* ---------- Режим плагина (VST3-эффект для Ableton) ----------
+   Эффект не получает MIDI от хоста, поэтому ноты берутся двумя способами:
+   1) «MIDI»: ты загружаешь тот же .mid, что играет Superior Drummer; страница идёт синхронно с транспортом Ableton (позиция в долях);
+   2) «Аудио»: детектор слушает звук дорожки (5 полос по 5 мс) и угадывает бочку/снейр/хэт/том/тарелку.
+   Вызывает всё это C++-обёртка через window.__plug.* */
+const LA_MS = 160;
+const plug = {feat:null, on:false, mode:'midi', q:0, bpm:120, playing:false, tickMs:0, lastQ:-1e9, latency:100, off:0, replanAt:0, log:null};
+function seekQ(q){
+  let lo = 0, hi = notes.length;
+  while(lo < hi){ const m = (lo+hi) >> 1; if(notes[m].q+plug.off < q) lo = m+1; else hi = m; }
+  nextIdx = lo;
+}
+function plugFeed(now){
+  if(plug.replanAt && now > plug.replanAt){ plug.replanAt = 0; planSticking(); }
+  if(!plug.playing){ PULSE *= 0.92; return; }
+  const bpm = plug.bpm, posQ = plug.q+(now-plug.tickMs)/60000*bpm;
+  if(posQ < plug.lastQ-0.02 || posQ-plug.lastQ > 2) seekQ(posQ);          // перемотка или цикл в Ableton
+  plug.lastQ = posQ;
+  PULSE = 0.5+0.5*Math.cos((posQ%1)*6.2832);
+  const horizonQ = posQ+Math.max(0,LA_MS-plug.latency)/60000*bpm;
+  while(nextIdx < notes.length && notes[nextIdx].q+plug.off <= horizonQ){
+    const n = notes[nextIdx++], nn = n.nextI >= 0 ? notes[n.nextI] : null;
+    const arrive = now+Math.max(0,(n.q+plug.off-posQ)*60000/bpm+plug.latency);   // звук идёт с задержкой плагина → визуал тоже
+    trigger(n.note,n.vel,arrive,n.hand,n.foot,nn ? {dt:(nn.q-n.q)*60000/bpm, note:nn.note} : null);
+  }
+}
+
+// ----- детектор по звуку: 5 полос (≤120 Гц, 120–400, 400–2.5к, 2.5–8к, ≥8к), кадр 5 мс -----
+const DET_FRAME_MS = 5, DET_FLOOR = -50, DET_THR = [8,7,7,7,8];
+const DET = {L:[[],[],[],[],[]], w:null, frames:0};
+function detEmit(note,P,t0){
+  const vel = clamp(Math.round(30+(P+32)*3.4),18,127);
+  if(plug.log) plug.log.push({t:t0,note,vel});
+  else if(plug.on && plug.mode === 'audio') trigger(note,vel,t0+plug.latency,undefined,undefined,null);
+}
+function detFinalize(w){
+  if(plug.feat) plug.feat.push({t0:w.t0,P:w.P.slice(),D:w.D.slice(),dec4:w.dec4});
+  const P = w.P, R = w.R, t0 = w.t0, on = i => R[i] >= DET_THR[i] && P[i] >= DET_FLOOR;   // R — прирост уровня в полосе над тем, что было до удара
+  const [a,b,c,d,e] = P;
+  const snare = on(2) && on(3) && (on(4) || d > -40);                                   // снейр: одновременно середина и «треск»
+  if(snare) detEmit(38,Math.max(c,d),t0);
+  if(on(0) && a >= b-2 && !snare) detEmit(36,a,t0);                                      // бочка: низ сильнее середины
+  else if(on(0) && a >= b-2 && snare && R[0] >= 14) detEmit(36,a,t0);                    // бочка вместе со снейром — только если низ явно вырос
+  else if(on(1) && !snare && (b > a+2 || b-c >= 8) && (!on(3) || R[3] < R[1]-12)){       // том: середина-низ, без верха
+    const r = a-b; detEmit(r > -5 ? 41 : r > -10 ? 43 : 47,b,t0);
+  }
+  if(on(4) && !snare && (!on(2) || R[4]-R[2] >= 10)){                                    // хэт: вырос только верх
+    detEmit(w.dec4 < -14 ? 42 : 46,e,t0);
+  } else if(on(4) && !snare && on(2) && w.dec4 >= -8) detEmit(49,e,t0);                  // тарелка: верх + середина и долгое звучание
+}
+function detFrame(f,t){
+  const e = new Array(5), L = DET.L;
+  for(let i=0;i<5;i++){ e[i] = 20*Math.log10(f[i]+1e-6); const h = L[i]; h.push(e[i]); if(h.length > 4) h.shift(); }
+  const d = new Array(5);
+  for(let i=0;i<5;i++){ const h = L[i]; d[i] = h.length >= 3 ? e[i]-h[h.length-3] : 0; }
+  if(!DET.w){
+    let on = false; for(let i=0;i<5;i++) if(d[i] >= DET_THR[i] && e[i] >= DET_FLOOR) on = true;
+    if(on) DET.w = {t0:t-10, P:e.slice(), D:d.slice(), R:d.map(x => Math.min(x,40)), n:1, dec4:0};
+  } else {
+    const w = DET.w; w.n++;
+    for(let i=0;i<5;i++){ if(e[i] > w.P[i]) w.P[i] = e[i]; if(w.n <= 4){ const r = Math.min(d[i],40); if(r > w.R[i]) w.R[i] = r; } }
+    if(w.n === 8){ w.dec4 = e[4]-w.P[4]; detFinalize(w); DET.w = null; }
+  }
+}
+function detFeed(arr,t0){
+  const n = Math.floor(arr.length/5), now = t0 === undefined ? performance.now() : null;
+  for(let k=0;k<n;k++){
+    const t = now === null ? t0+k*DET_FRAME_MS : now-(n-1-k)*DET_FRAME_MS;
+    detFrame([arr[5*k],arr[5*k+1],arr[5*k+2],arr[5*k+3],arr[5*k+4]],t);
+  }
+}
+window.__plug = {
+  init(o){ plug.on = true; plug.latency = (o && o.latencyMs) || 100; document.body.classList.add('plug'); soundOn = false; $('snd').classList.remove('on'); $('plugInfo').hidden = false; plugInfo('Жду воспроизведения в Ableton…'); },
+  mode(m){ plug.mode = m; plugInfo(m === 'audio' ? 'Режим: слушаю звук дорожки' : 'Режим: ноты из MIDI-файла, синхрон с транспортом'); },
+  offset(q){ plug.off = +q || 0; if(plug.playing) seekQ(plug.q); },
+  loadMidi(b64){
+    const bin = atob(b64), u = new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) u[i] = bin.charCodeAt(i);
+    try{ setSong(parseMIDI(u.buffer),'MIDI из плагина'); if(plug.playing) seekQ(plug.q); plugInfo('MIDI загружен: '+notes.length+' нот'); }
+    catch(err){ plugInfo('Ошибка MIDI: '+err.message); }
+  },
+  tick(q,bpm,playing){
+    plug.q = q; plug.tickMs = performance.now();
+    if(bpm > 0){
+      if(Math.abs(bpm-plug.bpm)/plug.bpm > 0.02){ speed = clamp(bpm/songBpm,0.25,4); plug.replanAt = plug.tickMs+400; }
+      plug.bpm = bpm;
+    }
+    if(playing && !plug.playing){ plug.lastQ = q; seekQ(q); }
+    plug.playing = !!playing;
+  },
+  bands(arr,t0){ detFeed(arr,t0); }
+};
+function plugInfo(t){ $('plugInfo').textContent = t; }
+
+/* ---------- Главный цикл ---------- */
+function frame(){
+  const now = (typeof PIN === 'number') ? PIN : performance.now();
+  if(plug.on){ if(plug.mode === 'midi') plugFeed(now); else PULSE *= 0.95; }
+  else if(playing){
+    const dt = Math.min((now-lastTs)/1000,0.1); lastTs = now;
+    pos += dt*speed;
+    PULSE = 0.5+0.5*Math.cos(((pos/(60/songBpm))%1)*6.2832);
+    const horizon = pos + LA*speed;
+    while(nextIdx < notes.length && notes[nextIdx].t <= horizon){
+      const n = notes[nextIdx++];
+      const nn = n.nextI >= 0 ? notes[n.nextI] : null;
+      trigger(n.note,n.vel,now+Math.max(0,(n.t-pos)/speed*1000),n.hand,n.foot,nn ? {dt:(nn.t-n.t)/speed*1000, note:nn.note} : null);
+    }
+    if(pos >= dur+0.8){ if(loop && dur > 0) seek(0); else { setPlaying(false); seek(0); } }
+  }
+  if(pending.length){
+    const keep = [];
+    for(const p of pending){
+      if(p.t <= now){
+        flash[p.id] = {t:p.t, vel:p.vel, lv:p.lv, note:p.note};
+        if(p.mute){ muteT[p.id] = p.t; flash[p.id] = {t:-1e9, vel:0, lv:0, note:p.note}; }
+        lastHitX = BY[p.id].x;
+        if(p.id === 'kick' || p.id === 'hatpedal'){
+          footHit[p.foot === 0 ? 0 : 1] = {t:p.t, vel:p.vel, lv:p.lv};
+          if(p.id === 'kick') kickHit[p.foot === 0 ? 0 : 1] = {t:p.t, lv:p.lv};
+          if(p.id === 'kick' && p.foot === 0) lKickT = p.t;
+          if(p.foot === 0) lfoot.lastT = p.t;
+          if(p.id === 'hatpedal') padHit.hat = {t:p.t,lv:p.lv}; else if(p.id === 'kick') padHit[p.foot === 0 ? 'kL' : 'kR'] = {t:p.t,lv:p.lv};
+        }
+        if(p.id === 'hat') hatOpenAmt = HAT_OPEN[p.note] || 0;
+        else if(p.id === 'hatpedal') hatOpenAmt = 0;
+      } else keep.push(p);
+    }
+    pending = keep;
+  }
+  if(!dragging){ const sv = dur ? Math.round(pos/dur*1000) : 0; if(sv !== lastSeek){ lastSeek = sv; $('seek').value = sv; } }
+  const tx = fmt(pos) + ' / ' + fmt(dur); if(tx !== lastTime){ lastTime = tx; $('time').textContent = tx; }
+  draw(now);
+  requestAnimationFrame(frame);
+}
+
+/* ---------- Управление ---------- */
+$('play').onclick = () => setPlaying(!playing);
+$('stop').onclick = () => { setPlaying(false); seek(0); };
+{ let gi = 0;
+  DEMO_GROUPS.forEach(g => {
+    const og = document.createElement('optgroup'); og.label = g.group;
+    g.items.forEach(d => { const o = document.createElement('option'); o.value = gi++; o.textContent = d.name; og.appendChild(o); });
+    $('demoSel').appendChild(og);
+  });
+}
+$('rnd').onclick = () => { const r = randomDemo(); setSong(r.notes,r.name); setPlaying(true); };
+$('demoSel').onchange = e => {
+  if(e.target.value === '') return;
+  const d = DEMOS[+e.target.value];
+  setSong(d.fn(), d.name); setPlaying(true);
+};
+$('snareMode').onchange = e => { snareMode = e.target.value; PREF.snare = SNARE_MODES[snareMode].slice(); planSticking(); };
+$('view').onclick = e => {
+  viewMode = viewMode === 'top' ? 'pov' : 'top';
+  e.target.textContent = viewMode === 'top' ? 'Вид: сверху' : 'Вид: от первого лица';
+  $('stage').style.maxWidth = viewMode === 'pov' ? '980px' : '520px';
+  resize();
+};
+$('speed').onchange = e => { speed = +e.target.value; planSticking(); };
+$('snd').onclick = e => { soundOn = !soundOn; e.target.classList.toggle('on',soundOn); if(soundOn) ensureAudio(); };
+$('loop').onclick = e => { loop = !loop; e.target.classList.toggle('on',loop); };
+$('nn').onclick = e => { showNotes = !showNotes; e.target.classList.toggle('on',showNotes); };
+const seekEl = $('seek');
+seekEl.addEventListener('pointerdown',() => dragging = true);
+seekEl.addEventListener('pointerup',() => dragging = false);
+seekEl.addEventListener('input',() => seek(seekEl.value/1000*dur));
+$('file').onchange = async e => {
+  const f = e.target.files[0]; if(!f) return;
+  try{
+    const n = parseMIDI(await f.arrayBuffer());
+    if(!n.length) throw new Error('В файле нет нот');
+    setSong(n,f.name);
+  }catch(err){ $('info').textContent = 'Ошибка: ' + err.message; }
+  e.target.value = '';
+};
+
+// живой MIDI-вход (электронные барабаны / виртуальный порт)
+let liveOn = false;
+function onMsg(e){
+  const [s,n,v] = e.data;
+  if((s & 0xF0) === 0x90 && v > 0){ ensureAudio(); trigger(n,v,performance.now()+45); }
+}
+$('live').onclick = async e => {
+  if(liveOn) return;
+  if(!navigator.requestMIDIAccess){ $('info').textContent = 'Этот браузер не поддерживает Web MIDI (в Chrome на компьютере работает).'; return; }
+  try{
+    const acc = await navigator.requestMIDIAccess();
+    const bind = () => acc.inputs.forEach(i => i.onmidimessage = onMsg);
+    bind(); acc.onstatechange = bind; liveOn = true; e.target.classList.add('on');
+    $('info').textContent = 'MIDI-вход включён: играй — барабанщик повторяет.';
+  }catch(err){ $('info').textContent = 'Нет доступа к MIDI: ' + err.message; }
+};
+
+// панель привязки
+function buildMapUI(){
+  const box = $('map'); box.innerHTML = '';
+  DRUMS.forEach(d => {
+    const row = document.createElement('div'); row.className = 'mrow';
+    row.innerHTML = `<span class="dot" style="background:${d.c}"></span><span>${d.label}</span><input value="${d.notes.join(', ')}" aria-label="${d.label}"><span class="nm"></span>`;
+    const inp = row.querySelector('input'), nm = row.querySelector('.nm');
+    const upd = () => nm.textContent = d.notes.map(noteName).join(' ');
+    inp.addEventListener('change',() => {
+      d.notes = inp.value.split(/[ ,;]+/).map(Number).filter(n => Number.isInteger(n) && n >= 0 && n < 128);
+      rebuildMap(); upd(); updateInfo();
+    });
+    upd(); box.appendChild(row);
+  });
+}
+$('resetMap').onclick = () => { DRUMS.forEach((d,i) => d.notes = DEFAULT_NOTES[i].slice()); rebuildMap(); buildMapUI(); updateInfo(); };
+
+/* ---------- Полный роутинг: таблица нот + импорт из MIDI Layout ---------- */
+const artName = n => ART_NAME[n] || (n >= 11 && n <= 23 ? 'Hat articulation' : (n >= 27 && n <= 32 ? 'Cymbal extra' : ''));
+let routeBuilt = false;
+function setNote(n,id){
+  DRUMS.forEach(d => d.notes = d.notes.filter(x => x !== n));
+  if(id){ BY[id].notes.push(n); cleared.delete(n); } else cleared.add(n);
+}
+function assignNote(n,id){ setNote(n,id); rebuildMap(); buildMapUI(); updateInfo(); }
+function buildRoute(){
+  const box = $('route'); box.innerHTML = ''; routeBuilt = true;
+  for(let n=11;n<=96;n++){
+    const row = document.createElement('div'); row.className = 'rrow';
+    const cur = noteMap[n] || '';
+    row.innerHTML = `<span><b>${n}</b> <small>${noteName(n)}</small></span><span class="rn">${artName(n)}</span>`;
+    const mu = document.createElement('label'); mu.style.cssText = 'font-size:12px;color:var(--mut);display:flex;gap:4px;align-items:center';
+    const chk = document.createElement('input'); chk.type = 'checkbox'; chk.checked = isMute(n);
+    chk.onchange = () => { if(chk.checked) ART_KIND[n] = 'mute'; else if(ART_KIND[n] === 'mute') delete ART_KIND[n]; };
+    mu.appendChild(chk); mu.appendChild(document.createTextNode('mute')); row.appendChild(mu);
+    const sel = document.createElement('select');
+    sel.innerHTML = '<option value="">—</option>' + DRUMS.map(d => `<option value="${d.id}"${d.id===cur?' selected':''}>${d.label}</option>`).join('');
+    sel.onchange = () => assignNote(n,sel.value);
+    row.appendChild(sel); box.appendChild(row);
+  }
+}
+$('routeWrap').addEventListener('toggle',() => { if($('routeWrap').open) buildRoute(); });
+const KW = [['kick','kick'],['bass drum','kick'],['crash ride','crashride'],['crashride','crashride'],['china 2','china2'],['china2','china2'],
+  ['china','china2'],['crash 3','crash2'],['crash 2','crash2'],['crash 1','crash1'],['crash','crash1'],['splash','splash'],['spock','crash1'],
+  ['stack','crash1'],['ride','ride'],['floor tom 2','floor2'],['floor 2','floor2'],['floor tom 1','floor1'],['floor 1','floor1'],['floor','floor1'],
+  ['rack tom 2','tom2'],['rack 2','tom2'],['tom 2','tom2'],['rack tom 1','tom1'],['rack 1','tom1'],['tom 1','tom1'],['tom 3','floor1'],['tom 4','floor2'],['tom','tom1'],
+  ['pedal','hatpedal'],['hi-hat','hat'],['hihat','hat'],['hi hat','hat'],['hats','hat'],['hat','hat'],
+  ['snare','snare'],['rimshot','snare'],['rim shot','snare'],['side stick','snare'],['sidestick','snare']];
+function parseNoteToken(tok){
+  if(/^\d{1,3}$/.test(tok)){ const n = +tok; return n < 128 ? n : null; }
+  const m = tok.match(/^([A-Ga-g])([#b]?)(-?\d)$/); if(!m) return null;
+  const base = {c:0,d:2,e:4,f:5,g:7,a:9,b:11}[m[1].toLowerCase()], acc = m[2] === '#' ? 1 : m[2] === 'b' ? -1 : 0;
+  const n = (parseInt(m[3])+2)*12+base+acc; return n >= 0 && n < 128 ? n : null;
+}
+$('impBtn').onclick = () => {
+  let ok = 0; const bad = [];
+  $('impTxt').value.split(/\r?\n/).forEach(line => {
+    const t = line.trim(); if(!t) return;
+    const m = t.match(/^[\s\-•*]*([A-Ga-g][#b]?-?\d|\d{1,3})\b[\s:=\-–—\t]+(.+)$/);
+    if(!m){ bad.push(t); return; }
+    const n = parseNoteToken(m[1]); if(n === null){ bad.push(t); return; }
+    const txt = m[2].toLowerCase(), hit = KW.find(([k]) => txt.includes(k));
+    if(!hit){ bad.push(t); return; }
+    setNote(n,hit[1]); ART_NAME[n] = m[2].trim();
+    delete ART_KIND[n]; delete HAT_OPEN[n];
+    if(hit[1] === 'snare'){ if(/rim\s*shot/.test(txt)) ART_KIND[n] = 'rim'; else if(/side/.test(txt)) ART_KIND[n] = 'side'; }
+    if(hit[1] === 'ride' && /bell/.test(txt)) ART_KIND[n] = 'bell';
+    if(BY[hit[1]].type === 'cymbal' && /mute|choke|damp/.test(txt)) ART_KIND[n] = 'mute';
+    if(hit[1] === 'hat' && /open/.test(txt)){ const dg = txt.match(/open\D*(\d)/); HAT_OPEN[n] = dg ? Math.min(1,+dg[1]*0.25) : 1; }
+    ok++;
+  });
+  rebuildMap(); buildMapUI(); updateInfo();
+  $('impRes').textContent = `применено: ${ok}` + (bad.length ? `, не распознано: ${bad.length}` : '');
+};
+$('routeReset').onclick = () => {
+  DRUMS.forEach((d,i) => d.notes = DEFAULT_NOTES[i].slice()); cleared.clear();
+  for(const k of Object.keys(ART_NAME)) delete ART_NAME[k]; Object.assign(ART_NAME,DEF.name);
+  for(const k of Object.keys(ART_KIND)) delete ART_KIND[k]; Object.assign(ART_KIND,DEF.kind);
+  for(const k of Object.keys(HAT_OPEN)) delete HAT_OPEN[k]; Object.assign(HAT_OPEN,DEF.open);
+  rebuildMap(); buildMapUI(); updateInfo();
+};
+
+/* ---------- Тест-MIDI для сэмплирования EZX + нарезка баунса ---------- */
+function noteFor(id,kind){
+  const cur = BY[id].notes, defs = DEFAULT_NOTES[DRUMS.indexOf(BY[id])];
+  const ok = n => kind === 'rim' ? isRim(n) : kind === 'side' ? isSide(n) : kind === 'bell' ? isBell(n) : kind === 'mute' ? isMute(n)
+    : !isRim(n) && !isSide(n) && !isBell(n) && !isMute(n) && !(HAT_OPEN[n] > 0) && n !== 39 && n !== 35;
+  const c = defs.find(n => cur.includes(n) && ok(n));
+  return c !== undefined ? c : cur.find(ok);
+}
+function repVel(id,lv){
+  const d = BY[id], g = d.type === 'kick' ? 'k' : d.id === 'snare' ? 's' : d.type === 'drum' ? 't' : 'c';
+  return VL[g]['gsmh'[lv]];
+}
+function testPlan(){
+  const spec = [['kick','main',[3,2,1],1.0],
+    ['snare','main',[0,1,2,3],1.1],['snare','rim',[3],1.1],['snare','side',[2],1.0],
+    ['hat','main',[0,1,2,3],0.7],['hat','open',[2,3],2.2],['hatpedal','main',[2],0.7],
+    ['tom1','main',[0,1,2,3],1.4],['tom2','main',[0,1,2,3],1.4],['floor1','main',[0,1,2,3],1.6],['floor2','main',[0,1,2,3],1.6],
+    ['ride','main',[1,2,3],2.2],['ride','bell',[2,3],2.5],
+    ['crash1','main',[1,2,3],4.2],['crash2','main',[1,2,3],4.2],['crashride','main',[2,3],3.5],
+    ['splash','main',[2,3],2.5],['china2','main',[2,3],3.2],
+    ['crash1','mute',[2,3],1.2],['crash2','mute',[2,3],1.2],['crashride','mute',[2,3],1.2]];
+  const ev = []; let t = 0.5;
+  spec.forEach(([id,kind,lvs,ring]) => {
+    const notes = kind === 'open' ? Object.keys(HAT_OPEN).map(Number).filter(n => noteMap[n] === 'hat' && HAT_OPEN[n] > 0).sort((x,y) => x-y) : [noteFor(id,kind)];
+    notes.forEach(note => { if(note === undefined) return;
+      lvs.forEach(lv => { for(let r=0;r<2;r++){ ev.push({id,note,lv,vel:repVel(id,lv),t}); t += ring; } }); });
+  });
+  return ev;
+}
+function makeMidi(ev){
+  const vl = v => { const o = [v & 0x7f]; while((v >>= 7)) o.unshift((v & 0x7f) | 0x80); return o; };
+  const evs = [];
+  ev.forEach(e => { const on = Math.round(e.t*960); evs.push({t:on,b:[0x99,e.note,e.vel]}); evs.push({t:on+120,b:[0x89,e.note,0]}); });
+  evs.sort((a,b) => a.t-b.t);
+  const trk = [0,0xFF,0x51,0x03,0x07,0xA1,0x20]; let last = 0;     // 120 bpm, PPQ 480 → 960 тиков/с
+  evs.forEach(e => { vl(e.t-last).forEach(x => trk.push(x)); e.b.forEach(x => trk.push(x)); last = e.t; });
+  trk.push(0,0xFF,0x2F,0x00);
+  const n = trk.length;
+  return new Uint8Array([0x4D,0x54,0x68,0x64,0,0,0,6,0,0,0,1,0x01,0xE0, 0x4D,0x54,0x72,0x6B,(n>>24)&255,(n>>16)&255,(n>>8)&255,n&255].concat(trk));
+}
+async function sliceBounce(file){
+  ensureAudio();
+  const ev = TEST_EV || testPlan();
+  const buf = await AC.decodeAudioData(await file.arrayBuffer());
+  const sr = buf.sampleRate, nch = Math.min(2,buf.numberOfChannels), ch = [];
+  for(let c=0;c<nch;c++) ch.push(buf.getChannelData(c));
+  let on = -1;
+  for(let i=0;i<buf.length && on < 0;i++){ let m = 0; for(let c=0;c<nch;c++) m = Math.max(m,Math.abs(ch[c][i])); if(m > 0.01) on = i; }
+  if(on < 0) throw new Error('в файле тишина');
+  const off = on/sr - ev[0].t;                          // сдвиг баунса относительно MIDI
+  for(const k in SMP) delete SMP[k];
+  let n = 0;
+  ev.forEach((e,k) => {
+    const t0 = e.t+off-0.003, t1 = k+1 < ev.length ? ev[k+1].t+off-0.012 : buf.duration;
+    const a = Math.max(0,Math.floor(t0*sr)), b = Math.min(buf.length,Math.floor(t1*sr));
+    if(b-a < sr*0.02) return;
+    const out = AC.createBuffer(nch,b-a,sr);
+    for(let c=0;c<nch;c++){
+      const dst = out.getChannelData(c); dst.set(ch[c].subarray(a,b));
+      const fade = Math.min(dst.length,Math.floor(sr*0.008));
+      for(let i=0;i<fade;i++) dst[dst.length-1-i] *= i/fade;
+    }
+    addSample(e.note,e.lv,out); n++;
+  });
+  return n;
+}
+function smpUI(msg){
+  $('smpToggle').textContent = 'Сэмплы: ' + (useSamples ? 'вкл' : 'выкл'); $('smpToggle').classList.toggle('on',useSamples);
+  $('smpInfo').textContent = msg || (useSamples ? `Играет твоими сэмплами EZX: ${smpCount()} шт.` : 'Сейчас играет синтез с «метал»-голосом.');
+}
+$('smpMidi').onclick = () => {
+  TEST_EV = testPlan();
+  const url = URL.createObjectURL(new Blob([makeMidi(TEST_EV)],{type:'audio/midi'}));
+  const a = document.createElement('a'); a.href = url; a.download = 'EZX_sampling_test.mid'; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url),5000);
+  smpUI(`Тест-MIDI: ${TEST_EV.length} ударов, ~${Math.round(TEST_EV[TEST_EV.length-1].t+4)} с. Играет на канале 10, 120 bpm. Баунс делай от самого начала.`);
+};
+$('smpBounce').onchange = async e => {
+  const f = e.target.files[0]; if(!f) return;
+  try{ smpUI('Режу баунс…'); const n = await sliceBounce(f); useSamples = true; smpUI(`Нарезано ${n} ударов. Играет твоим звуком EZX.`); }
+  catch(err){ smpUI('Не вышло: ' + err.message); }
+  e.target.value = '';
+};
+$('smpFiles').onchange = async e => {
+  ensureAudio(); let ok = 0; const bad = [];
+  for(const f of e.target.files){
+    try{
+      const nm = f.name.toLowerCase().replace(/\.[a-z0-9]+$/,'');
+      const hit = KW.find(([k]) => nm.includes(k)); if(!hit) throw 0;
+      const d = BY[hit[1]];
+      let lv = /ghost/.test(nm) ? 0 : /soft|light/.test(nm) ? 1 : /med|mid/.test(nm) ? 2 : /hard|loud/.test(nm) ? 3 : null;
+      if(lv === null){ const m = nm.match(/(\d{2,3})/); lv = m ? layerOf(d,Math.min(127,+m[1])) : 2; }
+      let note = d.notes[0];
+      if(hit[1] === 'snare'){ note = /rim/.test(nm) ? d.notes.find(isRim) : /side/.test(nm) ? d.notes.find(isSide) : d.notes.find(n => !isRim(n) && !isSide(n)); }
+      if(hit[1] === 'ride' && /bell/.test(nm)) note = d.notes.find(isBell);
+      if(hit[1] === 'hat'){
+        const om = nm.match(/open\D*(\d)?/);
+        if(om){ const lvl = om[1] ? Math.min(1,+om[1]*0.25) : 1; note = Object.keys(HAT_OPEN).map(Number).filter(n => noteMap[n] === 'hat' && Math.abs(HAT_OPEN[n]-lvl) < 0.01)[0]; }
+        else note = d.notes.find(n => !HAT_OPEN[n]);
+      }
+      if(note === undefined) note = d.notes[0];
+      if(note === undefined) throw 0;
+      addSample(note,lv,await AC.decodeAudioData(await f.arrayBuffer())); ok++;
+    }catch(err){ bad.push(f.name); }
+  }
+  useSamples = smpCount() > 0;
+  smpUI(`Загружено ${ok}` + (bad.length ? `, не распознано: ${bad.length} (${bad.slice(0,3).join(', ')}…)` : '') + (useSamples ? '. Играет твоими сэмплами.' : ''));
+  e.target.value = '';
+};
+$('smpToggle').onclick = () => { if(!smpCount()){ smpUI('Сэмплов пока нет — загрузи баунс или WAV.'); return; } useSamples = !useSamples; smpUI(); };
+$('smpClear').onclick = () => { for(const k in SMP) delete SMP[k]; useSamples = false; smpUI(); };
+
+const LAYLABEL = {kick:'KICK', snare:'SNARE', hat:'HI-HAT', cym:'ТАРЕЛКИ', tom:'ТОМЫ'};
+function buildLayerUI(){
+  const box = $('lay');
+  box.innerHTML = '<div class="lrow lh"><span></span><span>ghost ≤</span><span>soft ≤</span><span>med ≤</span></div>';
+  Object.keys(LAY).forEach(k => {
+    const row = document.createElement('div'); row.className = 'lrow';
+    row.innerHTML = `<span>${LAYLABEL[k]}</span>` + [0,1,2].map(i => `<input type="number" min="0" max="126" value="${LAY[k][i]}" data-k="${k}" data-i="${i}">`).join('');
+    box.appendChild(row);
+  });
+  box.querySelectorAll('input').forEach(inp => inp.addEventListener('change', () => {
+    LAY[inp.dataset.k][+inp.dataset.i] = clamp(+inp.value || 0,0,126); planSticking();
+  }));
+}
+window.__dbg = {
+  trigCount:() => TRIGC, plugState:() => ({nextIdx,q:plug.lastQ,playing:plug.playing,speed}),
+  notes:() => notes.map(n => ({t:n.t,note:n.note,vel:n.vel})),
+  render:async (list,secs,sr) => {                                         // офлайн-рендер синтеза → 5 полос по 5 мс (для проверки детектора)
+    const keep = {AC,master,dryBus,NB,so:soundOn,us:useSamples}; const oc = new OfflineAudioContext(2,Math.floor(sr*secs),sr);
+    buildAudio(oc); soundOn = true; useSamples = false;
+    list.forEach(n => { const id = noteMap[n.note]; if(id) playSound(BY[id],n.note,n.vel,n.t/1000); });
+    const buf = await oc.startRendering(); AC = keep.AC; master = keep.master; dryBus = keep.dryBus; NB = keep.NB; soundOn = keep.so; useSamples = keep.us;
+    const mono = new Float32Array(buf.length), a = buf.getChannelData(0), b = buf.getChannelData(1); for(let i=0;i<mono.length;i++) mono[i] = 0.5*(a[i]+b[i]);
+    const bc = new OfflineAudioContext(5,mono.length,sr), src = bc.createBufferSource(), ab = bc.createBuffer(1,mono.length,sr); ab.getChannelData(0).set(mono); src.buffer = ab;
+    const bq = (type,f) => { const x = bc.createBiquadFilter(); x.type = type; x.frequency.value = f; x.Q.value = 0.7071; return x; };
+    const chains = [[['lowpass',120]],[['highpass',120],['lowpass',400]],[['highpass',400],['lowpass',2500]],[['highpass',2500],['lowpass',8000]],[['highpass',8000]]];
+    const mg = bc.createChannelMerger(5);
+    chains.forEach((ch,i) => { let node = src; ch.forEach(([t,f]) => { const x = bq(t,f); node.connect(x); node = x; }); node.connect(mg,0,i); });
+    mg.connect(bc.destination); src.start(); const out = await bc.startRendering();
+    const fl = Math.floor(sr*0.005), nf = Math.floor(mono.length/fl), frames = new Float32Array(nf*5);
+    for(let c=0;c<5;c++){ const d = out.getChannelData(c); for(let k=0;k<nf;k++){ let sum = 0; for(let i=0;i<fl;i++){ const v = d[k*fl+i]; sum += v*v; } frames[k*5+c] = Math.sqrt(sum/fl); } }
+    return Array.from(frames);
+  },
+  feat:(frames) => { plug.feat = []; plug.log = []; DET.w = null; DET.L = [[],[],[],[],[]]; detFeed(frames,0); const r = plug.feat; plug.feat = null; plug.log = null; return r; },
+  detect:(frames) => { plug.log = []; DET.w = null; DET.L = [[],[],[],[],[]]; detFeed(frames,0); const r = plug.log; plug.log = null; return r; }, pin:v => { PIN = v; }, hitFreeze:(id,hand,note,extra) => { PIN = null; const now = performance.now(); trigger(note !== undefined ? note : BY[id].notes[0],120,now+60,hand,-1); PIN = now+66+(extra||0); },
+  reach:() => [hands.L.reach,hands.R.reach],
+  tip:(hand,id) => { const t = evalHand(HAND[hand],performance.now()), b = povMap(t.x,t.y), g = PV[id]; return {dx:(b.x-g.x)/g.rx, dy:(b.y-g.y)/g.ry, h:t.h}; } };
+window.addEventListener('resize',resize);
+buildLayerUI(); buildMapUI(); resize();
+setSong(DEMOS[0].fn(), DEMOS[0].name);
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

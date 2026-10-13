@@ -1,21 +1,22 @@
-name: Build VST3
+name: Build VST3 (Windows)
 on:
   push:
   workflow_dispatch:
 jobs:
   build:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: nuget/setup-nuget@v2
+      - name: Install WebView2 package
+        shell: bash
+        run: nuget install Microsoft.Web.WebView2 -Version 1.0.1901.177 -OutputDirectory webview2pkg
       - name: Configure
         shell: bash
         run: |
           set -o pipefail
-          cmake -B build -DCMAKE_BUILD_TYPE=Release 2>&1 | tee build.log
+          WV2="$(echo "$GITHUB_WORKSPACE/webview2pkg" | sed 's#\\#/#g')"
+          cmake -B build -DCMAKE_BUILD_TYPE=Release -DJUCE_WEBVIEW2_PACKAGE_LOCATION="$WV2" 2>&1 | tee build.log
       - name: Build
         shell: bash
         run: |
@@ -24,7 +25,9 @@ jobs:
       - name: Errors (only if something failed)
         if: failure()
         shell: bash
-        run: grep -n -i -E "error|fatal|cannot find|not found" build.log | head -60 || true
+        run: |
+          grep -n -i -B3 -A14 "CMake Error" build.log | head -90 || true
+          grep -n -i -E " error |error C|fatal" build.log | head -40 || true
       - name: Pack
         shell: bash
         run: |
@@ -33,10 +36,10 @@ jobs:
           ls -R out || true
       - uses: actions/upload-artifact@v4
         with:
-          name: DrummerViz-${{ matrix.os }}
+          name: DrummerViz-windows
           path: out
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: log-${{ matrix.os }}
+          name: log-windows
           path: build.log
